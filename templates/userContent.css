@@ -1,0 +1,40 @@
+/* plasma-themer — Firefox content pages ({{ name }}) */
+@import url("themer-colors.css");
+
+@-moz-document url-prefix("about:newtab"), url-prefix("about:home"), url-prefix("about:privatebrowsing") {
+  body {
+    background-color: var(--themer-bg) !important;
+    background-image:
+      radial-gradient(1200px 600px at 15% -10%, color-mix(in srgb, var(--themer-accent) 22%, transparent), transparent 60%),
+      radial-gradient(900px 500px at 110% 110%, color-mix(in srgb, var(--themer-magenta) 18%, transparent), transparent 60%) !important;
+    background-attachment: fixed !important;
+    --newtab-background-color: transparent !important;
+    --newtab-text-primary-color: var(--themer-fg) !important;
+    --newtab-element-hover-color: var(--themer-surface) !important;
+    --newtab-primary-action-background: var(--themer-accent) !important;
+  }
+  .search-handoff-button, .search-inner-wrapper input {
+    border-radius: 12px !important;
+    background-color: var(--themer-dark) !important;
+    color: var(--themer-fg) !important;
+    border: 1px solid var(--themer-border) !important;
+  }
+  .top-site-outer .tile { border-radius: 14px !important; background-color: var(--themer-surface) !important; }
+}
+
+@-moz-document url-prefix("about:") {
+  :root {
+    --in-content-page-background: var(--themer-bg) !important;
+    --in-content-page-color: var(--themer-fg) !important;
+    --in-content-box-background: var(--themer-dark) !important;
+    --in-content-primary-button-background: var(--themer-accent) !important;
+    --in-content-primary-button-text-color: var(--themer-accent-fg) !important;
+    --in-content-accent-color: var(--themer-accent) !important;
+    --color-accent-primary: var(--themer-accent) !important;
+    --link-color: var(--themer-accent) !important;
+  }
+}
+
+/* Scrollbars + selection on every page */
+:root { scrollbar-color: var(--themer-surface2) transparent; }
+::selection { background-color: color-mix(in srgb, var(--themer-accent) 35%, transparent); }

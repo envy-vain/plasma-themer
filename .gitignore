@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+# Omarchy wallpapers are fetched by install/fetch-wallpapers.sh, only generated ones are committed
+themes/*/backgrounds/*
+!themes/*/backgrounds/gen-*

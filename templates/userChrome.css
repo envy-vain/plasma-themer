@@ -1,0 +1,68 @@
+/* plasma-themer — Firefox chrome. Colors come live from Pywalfox; this file only does shape + polish.
+   Generated: {{ name }}. Fallback colors below apply if Pywalfox isn't connected. */
+@import url("themer-colors.css");
+
+:root {
+  --themer-radius: 8px;
+  --tab-border-radius: var(--themer-radius) !important;
+  --tab-min-height: 32px !important;
+  --toolbarbutton-border-radius: 6px !important;
+  --urlbar-min-height: 32px !important;
+}
+
+/* Fallback palette when no add-on theme is active */
+:root:not([lwtheme]) {
+  --toolbar-bgcolor: var(--themer-bg) !important;
+  --toolbar-color: var(--themer-fg) !important;
+  --lwt-accent-color: var(--themer-darker) !important;
+  --tab-selected-bgcolor: var(--themer-surface) !important;
+  --toolbar-field-background-color: var(--themer-darker) !important;
+  --toolbar-field-color: var(--themer-fg) !important;
+  --toolbar-field-focus-background-color: var(--themer-dark) !important;
+}
+
+/* Accent: selected-tab line, focus ring, loading throbber */
+.tab-background[selected] {
+  box-shadow: inset 0 -2px 0 var(--themer-accent) !important;
+  outline: none !important;
+}
+#urlbar[focused] > #urlbar-background,
+#searchbar:focus-within {
+  outline: 2px solid var(--themer-accent) !important;
+  outline-offset: -1px !important;
+}
+.tab-throbber[busy]::before { fill: var(--themer-accent) !important; }
+:root { --focus-outline-color: var(--themer-accent) !important; accent-color: var(--themer-accent); }
+
+/* Compact, calmer tab strip */
+.tabbrowser-tab { padding-inline: 2px !important; }
+.tab-background { margin-block: 3px !important; }
+#tabbrowser-tabs { border-inline-start: none !important; }
+.tab-close-button { opacity: 0; transition: opacity 120ms; }
+.tabbrowser-tab:hover .tab-close-button,
+.tabbrowser-tab[selected] .tab-close-button { opacity: 0.7; }
+
+/* Urlbar */
+#urlbar-background { border-radius: var(--themer-radius) !important; border: none !important; }
+#urlbar[open] > #urlbar-background { box-shadow: 0 8px 24px rgba(0,0,0,.35) !important; }
+
+/* Menus / popups pick up the palette too */
+menupopup, panel {
+  --panel-background: var(--themer-dark) !important;
+  --panel-color: var(--themer-fg) !important;
+  --panel-border-color: var(--themer-border) !important;
+  --panel-border-radius: var(--themer-radius) !important;
+  --arrowpanel-background: var(--themer-dark) !important;
+  --arrowpanel-color: var(--themer-fg) !important;
+  --arrowpanel-border-color: var(--themer-border) !important;
+}
+menupopup menuitem[_moz-menuactive], menupopup menu[_moz-menuactive] {
+  background-color: var(--themer-selection) !important;
+  color: var(--themer-fg) !important;
+}
+
+/* Sidebar (vertical tabs / bookmarks) */
+#sidebar-box, #sidebar-main, sidebar-main {
+  background-color: var(--themer-darker) !important;
+  color: var(--themer-fg) !important;
+}

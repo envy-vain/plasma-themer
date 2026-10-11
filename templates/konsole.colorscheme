@@ -1,0 +1,40 @@
+{%- set names = ["Color0","Color1","Color2","Color3","Color4","Color5","Color6","Color7"] -%}
+[Background]
+Color={{ c.background | rgb }}
+
+[BackgroundFaint]
+Color={{ c.background | rgb }}
+
+[BackgroundIntense]
+Color={{ c.dark_background | rgb }}
+
+{% for i in range(8) -%}
+[{{ names[i] }}]
+Color={{ c.ansi[i] | rgb }}
+
+[{{ names[i] }}Faint]
+Color={{ c.ansi[i] | mix(c.background, 0.35) | rgb }}
+
+[{{ names[i] }}Intense]
+Color={{ c.ansi[i + 8] | rgb }}
+
+{% endfor -%}
+[Foreground]
+Color={{ c.foreground | rgb }}
+
+[ForegroundFaint]
+Color={{ c.dark_foreground | rgb }}
+
+[ForegroundIntense]
+Color={{ c.bright_foreground | rgb }}
+
+[General]
+Anchor=0.5,0.5
+Blur=true
+ColorRandomization=false
+Description={{ name }} (themer)
+FillStyle=Tile
+Opacity=0.92
+Wallpaper=
+WallpaperFlipType=NoFlip
+WallpaperOpacity=1

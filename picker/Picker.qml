@@ -1,0 +1,261 @@
+// plasma-themer overlay picker.
+//   ←/→ or h/l  theme      ↑/↓ or k/j  wallpaper      Enter  apply      Esc  close      1-9  jump
+import QtQuick
+import QtQuick.Window
+import QtQuick.Effects
+
+Window {
+    id: win
+    visible: true
+    visibility: Window.FullScreen
+    flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+    color: "transparent"
+    title: "Themer"
+
+    property var themes: []
+    property int idx: 0
+    property bool applying: false
+    readonly property var cur: themes.length ? themes[idx] : null
+    readonly property var col: cur ? cur.colors : ({})
+    function wp(t) { return t && t.wallpapers.length ? t.wallpapers[t.bg] : null }
+
+    Component.onCompleted: {
+        const args = Qt.application.arguments
+        const path = args[args.length - 1]
+        const xhr = new XMLHttpRequest()
+        xhr.open("GET", "file://" + path, false)
+        xhr.send()
+        const data = JSON.parse(xhr.responseText)
+        themes = data.themes
+        idx = Math.max(0, themes.findIndex(t => t.slug === data.current))
+        list.positionViewAtIndex(idx, PathView.Center)
+        root.opacity = 1
+    }
+
+    function move(d) { if (!applying) idx = (idx + d + themes.length) % themes.length }
+    function moveBg(d) {
+        if (applying || !cur || cur.wallpapers.length < 2) return
+        const t = themes.slice()
+        t[idx] = Object.assign({}, cur, { bg: (cur.bg + d + cur.wallpapers.length) % cur.wallpapers.length })
+        themes = t
+    }
+    function apply() {
+        if (applying) return
+        applying = true
+        console.log("APPLY:" + cur.slug + ":" + (wp(cur) ? wp(cur).file : ""))
+        quitTimer.start()
+    }
+    function close() { root.opacity = 0; closeTimer.start() }
+
+    Timer { id: quitTimer; interval: 1700; onTriggered: win.close() }
+    Timer { id: closeTimer; interval: 220; onTriggered: Qt.quit() }
+
+    Item {
+        id: root
+        anchors.fill: parent
+        opacity: 0
+        focus: true
+        Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+
+        Keys.onPressed: (e) => {
+            switch (e.key) {
+            case Qt.Key_Left: case Qt.Key_H: case Qt.Key_Backtab: move(-1); break
+            case Qt.Key_Right: case Qt.Key_L: case Qt.Key_Tab: move(1); break
+            case Qt.Key_Up: case Qt.Key_K: moveBg(-1); break
+            case Qt.Key_Down: case Qt.Key_J: moveBg(1); break
+            case Qt.Key_Return: case Qt.Key_Enter: case Qt.Key_Space: apply(); break
+            case Qt.Key_Escape: case Qt.Key_Q: if (!applying) close(); break
+            default:
+                const n = e.key - Qt.Key_1
+                if (n >= 0 && n < themes.length && !applying) idx = n
+            }
+            e.accepted = true
+        }
+
+        // ---- blurred live backdrop: crossfades to the focused theme's wallpaper
+        Repeater {
+            model: themes
+            Image {
+                anchors.fill: parent
+                source: wp(modelData) ? "file://" + wp(modelData).thumb : ""
+                fillMode: Image.PreserveAspectCrop
+                opacity: index === idx ? 1 : 0
+                visible: opacity > 0
+                Behavior on opacity { NumberAnimation { duration: 450; easing.type: Easing.InOutQuad } }
+                layer.enabled: true
+                layer.effect: MultiEffect { blurEnabled: true; blur: 1.0; blurMax: 64; brightness: -0.25; saturation: 0.1 }
+            }
+        }
+        Rectangle {
+            anchors.fill: parent
+            gradient: Gradient {
+                GradientStop { position: 0; color: Qt.alpha(col.darker_background || "#000", 0.55) }
+                GradientStop { position: 1; color: Qt.alpha(col.darker_background || "#000", 0.85) }
+            }
+            Behavior on gradient { enabled: false }
+        }
+        MouseArea { anchors.fill: parent; onClicked: if (!applying) win.close() }
+
+        // ---- header
+        Column {
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: parent.height * 0.12
+            spacing: 6
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: applying ? "Applying" : "Themes"
+                color: col.bright_foreground || "white"
+                font.pixelSize: 15; font.letterSpacing: 6; font.weight: Font.DemiBold
+                font.capitalization: Font.AllUppercase
+                opacity: 0.7
+            }
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: cur ? cur.name : ""
+                color: col.bright_foreground || "white"
+                font.pixelSize: 54; font.weight: Font.Light
+                Behavior on color { ColorAnimation { duration: 300 } }
+            }
+        }
+
+        // ---- cards
+        PathView {
+            id: list
+            readonly property real step: 460 * 0.82 + 84
+            anchors.centerIn: parent
+            width: parent.width
+            height: 420
+            model: themes
+            currentIndex: idx
+            pathItemCount: Math.min(themes.length, 5)
+            preferredHighlightBegin: 0.5
+            preferredHighlightEnd: 0.5
+            highlightRangeMode: PathView.StrictlyEnforceRange
+            highlightMoveDuration: 380
+            interactive: false
+            path: Path {
+                startX: list.width / 2 - list.step * list.pathItemCount / 2; startY: list.height / 2
+                PathLine { x: list.width / 2 + list.step * list.pathItemCount / 2; y: list.height / 2 }
+            }
+
+            delegate: Item {
+                id: card
+                required property var modelData
+                required property int index
+                readonly property bool sel: index === idx
+                width: 460; height: 380
+                scale: sel ? (applying ? 1.08 : 1.0) : 0.82
+                opacity: applying ? (sel ? 1 : 0) : (sel ? 1 : 0.45)
+                Behavior on scale { NumberAnimation { duration: 380; easing.type: Easing.OutBack; easing.overshoot: 1.4 } }
+                Behavior on opacity { NumberAnimation { duration: 300 } }
+
+                // glow
+                Rectangle {
+                    anchors.fill: frame; anchors.margins: -2; radius: 22
+                    color: "transparent"
+                    border.width: card.sel ? 2 : 0
+                    border.color: card.modelData.colors.accent
+                }
+                Rectangle {
+                    id: frame
+                    width: parent.width; height: 300; radius: 20
+                    color: card.modelData.colors.background
+                    Image {
+                        id: shot
+                        anchors.fill: parent
+                        source: wp(card.modelData) ? "file://" + wp(card.modelData).thumb : ""
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        visible: false
+                    }
+                    Rectangle { id: mask; anchors.fill: parent; radius: 20; visible: false; layer.enabled: true }
+                    MultiEffect {
+                        anchors.fill: parent
+                        source: shot
+                        maskEnabled: true
+                        maskSource: mask
+                    }
+                    // fake terminal snippet in the theme's colors
+                    Rectangle {
+                        anchors { left: parent.left; bottom: parent.bottom; margins: 16 }
+                        width: 210; height: 92; radius: 10
+                        color: Qt.alpha(card.modelData.colors.background, 0.88)
+                        border.color: Qt.alpha(card.modelData.colors.accent, 0.5)
+                        Column {
+                            anchors { fill: parent; margins: 10 }
+                            spacing: 3
+                            Row { spacing: 6
+                                Text { text: "~/proj"; color: card.modelData.colors.accent; font.family: "monospace"; font.pixelSize: 12 }
+                                Text { text: "main*"; color: card.modelData.colors.dark_foreground; font.family: "monospace"; font.pixelSize: 12 } }
+                            Row { spacing: 6
+                                Text { text: "❯"; color: card.modelData.colors.magenta; font.family: "monospace"; font.pixelSize: 12 }
+                                Text { text: "git commit"; color: card.modelData.colors.blue; font.family: "monospace"; font.pixelSize: 12 }
+                                Text { text: "-m \"ship\""; color: card.modelData.colors.green; font.family: "monospace"; font.pixelSize: 12 } }
+                            Text { text: "✓ 3 files changed"; color: card.modelData.colors.green; font.family: "monospace"; font.pixelSize: 12 }
+                            Text { text: "✗ 1 warning"; color: card.modelData.colors.yellow; font.family: "monospace"; font.pixelSize: 12 }
+                        }
+                    }
+                    // wallpaper dots
+                    Row {
+                        anchors { right: parent.right; bottom: parent.bottom; margins: 14 }
+                        spacing: 5
+                        visible: card.sel && card.modelData.wallpapers.length > 1
+                        Repeater {
+                            model: card.modelData.wallpapers.length
+                            Rectangle {
+                                required property int index
+                                width: index === card.modelData.bg ? 18 : 7; height: 7; radius: 4
+                                color: index === card.modelData.bg ? card.modelData.colors.accent : Qt.alpha("white", 0.5)
+                                Behavior on width { NumberAnimation { duration: 200 } }
+                            }
+                        }
+                    }
+                }
+                // swatches
+                Row {
+                    anchors { top: frame.bottom; topMargin: 22; horizontalCenter: parent.horizontalCenter }
+                    spacing: 10
+                    Repeater {
+                        model: ["accent", "red", "orange", "yellow", "green", "cyan", "blue", "magenta"]
+                        Rectangle {
+                            required property string modelData
+                            width: 26; height: 26; radius: 13
+                            color: card.modelData.colors[modelData] || "transparent"
+                            border.color: Qt.alpha("white", 0.15)
+                        }
+                    }
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: card.sel ? apply() : (idx = card.index)
+                }
+            }
+        }
+
+        // ---- footer hints / progress
+        Item {
+            anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: parent.height * 0.1 }
+            width: 600; height: 40
+            Text {
+                anchors.centerIn: parent
+                visible: !applying
+                text: "←  →  theme      ↑  ↓  wallpaper      ⏎  apply      esc  close"
+                color: col.dark_foreground || "#aaa"
+                font.pixelSize: 14; font.letterSpacing: 1
+            }
+            Rectangle {
+                visible: applying
+                anchors.centerIn: parent
+                width: 320; height: 4; radius: 2
+                color: Qt.alpha(col.foreground || "white", 0.15)
+                Rectangle {
+                    id: bar
+                    height: parent.height; radius: 2
+                    color: col.accent || "white"
+                    width: 0
+                    NumberAnimation on width { running: applying; from: 0; to: 320; duration: 1500; easing.type: Easing.OutCubic }
+                }
+            }
+        }
+    }
+}
