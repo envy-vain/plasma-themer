@@ -13,6 +13,8 @@ for t in "$here"/themes/*/; do
   src="$tmp/omarchy/themes/$slug/backgrounds"
   [[ -d $src ]] || continue
   mkdir -p "$t/backgrounds"
-  find "$src" -maxdepth 1 -type f \( -name '*.jpg' -o -name '*.png' -o -name '*.webp' \) -exec cp -n {} "$t/backgrounds/" \;
+  # skip the ones that are just Omarchy branding (logo wallpapers)
+  find "$src" -maxdepth 1 -type f \( -name '*.jpg' -o -name '*.png' -o -name '*.webp' \) \
+    ! -name 'omarchy.*' ! -name '*oma-cityscape*' ! -name '6-oma.*' -exec cp -n {} "$t/backgrounds/" \;
   echo "  $slug: $(ls "$t/backgrounds" | wc -l) wallpapers"
 done
