@@ -52,7 +52,9 @@ def run_picker(apply) -> int:
         return 0  # already open
     data_file = CACHE / "picker.json"
     data_file.write_text(json.dumps(build_data()))
-    env = {**os.environ, "QML_XHR_ALLOW_FILE_READ": "1", "QT_QUICK_CONTROLS_STYLE": "Basic"}
+    # QT_FORCE_STDERR_LOGGING: with a piped stderr Qt logs to journald instead, and we'd never see APPLY:
+    env = {**os.environ, "QML_XHR_ALLOW_FILE_READ": "1", "QT_QUICK_CONTROLS_STYLE": "Basic",
+           "QT_FORCE_STDERR_LOGGING": "1"}
     proc = subprocess.Popen(["qml6", str(REPO / "picker/Picker.qml"), "--", str(data_file)],
                             stderr=subprocess.PIPE, stdout=subprocess.DEVNULL, text=True, env=env)
     worker = None

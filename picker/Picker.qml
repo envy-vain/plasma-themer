@@ -17,7 +17,9 @@ Window {
     property bool applying: false
     readonly property var cur: themes.length ? themes[idx] : null
     readonly property var col: cur ? cur.colors : ({})
-    function wp(t) { return t && t.wallpapers.length ? t.wallpapers[t.bg] : null }
+    // wallpaper choice per theme lives here, NOT in `themes`: replacing the model array rebuilt every card
+    property var bgSel: []
+    function wp(t, i) { return t && t.wallpapers.length ? t.wallpapers[bgSel[i] ?? t.bg] : null }
 
     Component.onCompleted: {
         const args = Qt.application.arguments
@@ -26,6 +28,7 @@ Window {
         xhr.open("GET", "file://" + path, false)
         xhr.send()
         const data = JSON.parse(xhr.responseText)
+        bgSel = data.themes.map(t => t.bg)
         themes = data.themes
         idx = Math.max(0, themes.findIndex(t => t.slug === data.current))
         list.positionViewAtIndex(idx, PathView.Center)
@@ -35,14 +38,14 @@ Window {
     function move(d) { if (!applying) idx = (idx + d + themes.length) % themes.length }
     function moveBg(d) {
         if (applying || !cur || cur.wallpapers.length < 2) return
-        const t = themes.slice()
-        t[idx] = Object.assign({}, cur, { bg: (cur.bg + d + cur.wallpapers.length) % cur.wallpapers.length })
-        themes = t
+        const b = bgSel.slice()
+        b[idx] = (b[idx] + d + cur.wallpapers.length) % cur.wallpapers.length
+        bgSel = b
     }
     function apply() {
         if (applying) return
         applying = true
-        console.log("APPLY:" + cur.slug + ":" + (wp(cur) ? wp(cur).file : ""))
+        console.log("APPLY:" + cur.slug + ":" + (wp(cur, idx) ? wp(cur, idx).file : ""))
         quitTimer.start()
     }
     function close() { root.opacity = 0; closeTimer.start() }
@@ -77,7 +80,7 @@ Window {
             model: themes
             Image {
                 anchors.fill: parent
-                source: wp(modelData) ? "file://" + wp(modelData).thumb : ""
+                source: wp(modelData, index) ? "file://" + wp(modelData, index).thumb : ""
                 fillMode: Image.PreserveAspectCrop
                 opacity: index === idx ? 1 : 0
                 visible: opacity > 0
@@ -163,9 +166,9 @@ Window {
                     Image {
                         id: shot
                         anchors.fill: parent
-                        source: wp(card.modelData) ? "file://" + wp(card.modelData).thumb : ""
+                        source: wp(card.modelData, card.index) ? "file://" + wp(card.modelData, card.index).thumb : ""
                         fillMode: Image.PreserveAspectCrop
-                        asynchronous: true
+                        asynchronous: false
                         visible: false
                     }
                     Rectangle { id: mask; anchors.fill: parent; radius: 20; visible: false; layer.enabled: true }
@@ -204,8 +207,8 @@ Window {
                             model: card.modelData.wallpapers.length
                             Rectangle {
                                 required property int index
-                                width: index === card.modelData.bg ? 18 : 7; height: 7; radius: 4
-                                color: index === card.modelData.bg ? card.modelData.colors.accent : Qt.alpha("white", 0.5)
+                                width: index === bgSel[card.index] ? 18 : 7; height: 7; radius: 4
+                                color: index === bgSel[card.index] ? card.modelData.colors.accent : Qt.alpha("white", 0.5)
                                 Behavior on width { NumberAnimation { duration: 200 } }
                             }
                         }
