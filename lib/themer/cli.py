@@ -117,6 +117,15 @@ def cmd_bg(a):
     print(wp.name)
 
 
+def cmd_lite(a):
+    if a.mode:
+        state_set("lite", a.mode)
+        (core.STATE_DIR / "screen").unlink(missing_ok=True)  # re-detect resolution too
+    print(f"lite mode: {state_get('lite', 'auto')} -> {'ON' if core.lite() else 'off'}")
+    if a.mode and state_get("current"):
+        return apply(state_get("current"), {"konsole"})  # the only target whose output depends on it
+
+
 def cmd_pick(a):
     from .picker import run_picker
     return run_picker(apply)
@@ -149,6 +158,8 @@ def main(argv=None):
     sub.add_parser("setup", help="one-time setup (extensions, pywalfox, shortcuts)")
     sub.add_parser("doctor", help="check what is installed / wired up")
     sub.add_parser("targets", help="list integrations")
+    li = sub.add_parser("lite", help="lite mode for weak PCs: no blur/transparency/animations")
+    li.add_argument("mode", nargs="?", choices=["on", "off", "auto"])
     a = p.parse_args(argv)
 
     match a.cmd:
@@ -163,4 +174,5 @@ def main(argv=None):
         case "setup": return cmd_setup(a)
         case "doctor": return cmd_doctor(a)
         case "targets": print("\n".join(n for n, _ in TARGETS))
+        case "lite": return cmd_lite(a)
     return 0

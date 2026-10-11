@@ -1,4 +1,10 @@
-"""Launch the QML overlay picker and apply whatever it selects."""
+"""Launch the QML overlay picker and apply whatever it selects.
+
+Everything expensive is baked here once and cached, so the QML side only draws plain images:
+  card    rounded-corner PNG at card size (no runtime mask effect)
+  blur    tiny pre-blurred JPEG for the backdrop (no runtime blur shader)
+That keeps the picker smooth on weak GPUs and lets it run on Qt's software renderer.
+"""
 from __future__ import annotations
 
 import fcntl
@@ -6,41 +12,80 @@ import json
 import os
 import subprocess
 import threading
+from concurrent.futures import ProcessPoolExecutor
+from pathlib import Path
 
-from PIL import Image
+from .core import CACHE, REPO, list_themes, lite, load_theme, screen_wallpaper, state_get, state_set
 
-from .core import CACHE, REPO, list_themes, load_theme, state_get, state_set
+ART = CACHE / "picker"
+CARD_W, CARD_H, RADIUS = 460, 300, 20
+VERSION = "v2"  # bump to invalidate baked art
 
-THUMBS = CACHE / "thumbs"
+
+def _paths(src: Path) -> tuple[Path, Path]:
+    d = ART / src.parent.parent.name
+    return d / f"{src.stem}-card-{VERSION}.png", d / f"{src.stem}-blur-{VERSION}.jpg"
 
 
-def thumb(src, w=560, h=315):
-    out = THUMBS / src.parent.parent.name / (src.stem + ".jpg")
-    if not out.exists() or out.stat().st_mtime < src.stat().st_mtime:
-        out.parent.mkdir(parents=True, exist_ok=True)
-        im = Image.open(src).convert("RGB")
-        r = max(w / im.width, h / im.height)
-        im = im.resize((round(im.width * r), round(im.height * r)), Image.LANCZOS)
-        left, top = (im.width - w) // 2, (im.height - h) // 2
-        im.crop((left, top, left + w, top + h)).save(out, quality=88)
-    return out
+def _fresh(out: Path, src: Path) -> bool:
+    return out.exists() and out.stat().st_mtime >= src.stat().st_mtime
+
+
+def bake(src: Path) -> tuple[str, str]:
+    card, blur = _paths(src)
+    if _fresh(card, src) and _fresh(blur, src):
+        return str(card), str(blur)
+    from PIL import Image, ImageDraw, ImageFilter
+
+    from .core import _cover
+    card.parent.mkdir(parents=True, exist_ok=True)
+    with Image.open(screen_wallpaper(src)) as im:
+        c = _cover(im, CARD_W * 2, CARD_H * 2)  # 2x then downsample: smooth anti-aliased corners
+        mask = Image.new("L", c.size, 0)
+        ImageDraw.Draw(mask).rounded_rectangle((0, 0, *c.size), RADIUS * 2, fill=255)
+        c.putalpha(mask)
+        c.resize((CARD_W, CARD_H), Image.LANCZOS).save(card, optimize=True)
+        b = _cover(im, 320, 180).filter(ImageFilter.GaussianBlur(9))
+        b.point(lambda v: int(v * 0.75)).save(blur, quality=85)
+    return str(card), str(blur)
+
+
+def warm(workers: int | None = None) -> int:
+    """Bake every wallpaper (themer setup). Parallel across cores; cached after the first run."""
+    todo = [b for s in list_themes() for b in load_theme(s).backgrounds
+            if not all(_fresh(p, b) for p in _paths(b))]
+    if todo:
+        with ProcessPoolExecutor(max_workers=workers or max(1, (os.cpu_count() or 2) - 1)) as ex:
+            list(ex.map(bake, todo))
+    return len(todo)
 
 
 def build_data() -> dict:
-    themes = []
+    themes, missing = [], []
     for slug in list_themes():
         t = load_theme(slug)
         bgs = t.backgrounds
         saved = state_get(f"bg/{slug}")
         names = [b.name for b in bgs]
+        sel = names.index(saved) if saved in names else 0
+        wps = []
+        for i, b in enumerate(bgs):
+            card, blur = _paths(b)
+            if i == sel:
+                card, blur = map(Path, bake(b))  # the visible one must exist now
+            elif not (_fresh(card, b) and _fresh(blur, b)):
+                missing.append(b)
+            wps.append({"file": b.name, "card": str(card), "blur": str(blur)})
         themes.append({
             "slug": slug,
             "name": t.name,
             "colors": {k: v for k, v in t.colors.items() if isinstance(v, str) and v.startswith("#")},
-            "wallpapers": [{"file": b.name, "full": str(b), "thumb": str(thumb(b))} for b in bgs],
-            "bg": names.index(saved) if saved in names else 0,
+            "wallpapers": wps,
+            "bg": sel,
         })
-    return {"current": state_get("current", ""), "themes": themes}
+    if missing:  # finish the rest in the background while the picker is already up
+        threading.Thread(target=lambda: [bake(b) for b in missing], daemon=True).start()
+    return {"current": state_get("current", ""), "themes": themes, "lite": lite()}
 
 
 def run_picker(apply) -> int:
@@ -50,11 +95,14 @@ def run_picker(apply) -> int:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
         return 0  # already open
+    data = build_data()
     data_file = CACHE / "picker.json"
-    data_file.write_text(json.dumps(build_data()))
+    data_file.write_text(json.dumps(data))
     # QT_FORCE_STDERR_LOGGING: with a piped stderr Qt logs to journald instead, and we'd never see APPLY:
     env = {**os.environ, "QML_XHR_ALLOW_FILE_READ": "1", "QT_QUICK_CONTROLS_STYLE": "Basic",
            "QT_FORCE_STDERR_LOGGING": "1"}
+    if not any(Path("/dev/dri").glob("renderD*")):
+        env["QT_QUICK_BACKEND"] = "software"  # no GPU: the picker uses no shaders, so this just works
     proc = subprocess.Popen(["qml6", str(REPO / "picker/Picker.qml"), "--", str(data_file)],
                             stderr=subprocess.PIPE, stdout=subprocess.DEVNULL, text=True, env=env)
     worker = None

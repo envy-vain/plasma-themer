@@ -6,9 +6,8 @@ import os
 import subprocess
 import tomllib
 from dataclasses import dataclass, field
+from functools import cache
 from pathlib import Path
-
-from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 REPO = Path(__file__).resolve().parents[2]
 HOME = Path.home()
@@ -98,7 +97,7 @@ class Theme:
             c["muted"], c["bright_red"], c["bright_green"], c["bright_yellow"], c["bright_blue"],
             c["bright_magenta"], c["bright_cyan"], c["bright_foreground"],
         ]
-        return {"c": c, "theme": self, "slug": self.slug, "name": self.name, "meta": self.meta}
+        return {"c": c, "theme": self, "slug": self.slug, "name": self.name, "meta": self.meta, "lite": lite()}
 
 
 def load_theme(slug: str) -> Theme:
@@ -137,17 +136,19 @@ def state_set(key: str, value: str) -> None:
 
 # ---------------------------------------------------------------- helpers
 
-_env = Environment(
-    loader=FileSystemLoader(str(REPO / "templates")),
-    undefined=StrictUndefined,
-    keep_trailing_newline=True,
-)
-_env.filters.update(rgb=rgb_csv, mix=mix, alpha=alpha_hex, on=contrast_on,
-                    nohash=lambda h: h.lstrip("#"), lum=luminance)
+@cache
+def _env():
+    # jinja2 is imported lazily: `themer current`, `themer pick` etc. never pay for it
+    from jinja2 import Environment, FileSystemLoader, StrictUndefined
+    env = Environment(loader=FileSystemLoader(str(REPO / "templates")), undefined=StrictUndefined,
+                      keep_trailing_newline=True)
+    env.filters.update(rgb=rgb_csv, mix=mix, alpha=alpha_hex, on=contrast_on,
+                       nohash=lambda h: h.lstrip("#"), lum=luminance)
+    return env
 
 
 def render(template: str, ctx: dict) -> str:
-    return _env.get_template(template).render(**ctx)
+    return _env().get_template(template).render(**ctx)
 
 
 def write(path: Path, text: str) -> bool:
@@ -190,3 +191,72 @@ def log(msg: str) -> None:
     LOG.parent.mkdir(parents=True, exist_ok=True)
     with LOG.open("a") as f:
         f.write(msg.rstrip() + "\n")
+
+
+@cache
+def fonts() -> str:
+    return run("fc-list", ":", "family").stdout.lower()
+
+
+# ---------------------------------------------------------------- performance
+
+def screen_size() -> tuple[int, int]:
+    """Largest output in physical pixels, cached in state (refresh: `themer lite` or delete the file)."""
+    saved = state_get("screen")
+    if saved:
+        w, h = map(int, saved.split("x"))
+        return w, h
+    w, h = 1920, 1080
+    try:
+        outs = json.loads(run("kscreen-doctor", "-j").stdout)["outputs"]
+        sizes = [(o["size"]["width"], o["size"]["height"]) for o in outs if o.get("enabled") and o.get("size")]
+        if sizes:
+            w, h = max(sizes, key=lambda s: s[0] * s[1])
+    except Exception:  # noqa: BLE001 — headless / not KDE: keep the default
+        pass
+    state_set("screen", f"{w}x{h}")
+    return w, h
+
+
+def lite() -> bool:
+    """Lite mode: no blur/transparency/animations. `themer lite on|off|auto` (default auto)."""
+    mode = state_get("lite", "auto")
+    if mode in ("on", "off"):
+        return mode == "on"
+    gpu = any(Path("/dev/dri").glob("renderD*"))
+    try:
+        mem_gb = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 2**30
+    except (ValueError, OSError):
+        mem_gb = 8
+    return not gpu or (os.cpu_count() or 1) <= 2 or mem_gb < 4
+
+
+def _cover(im, w: int, h: int):
+    """Scale + center-crop to exactly w x h. Uses JPEG draft / reduce() so huge sources decode fast."""
+    from PIL import Image
+    r = max(w / im.width, h / im.height)
+    if im.format == "JPEG":
+        im.draft("RGB", (round(im.width * r), round(im.height * r)))
+    im = im.convert("RGB")
+    r = max(w / im.width, h / im.height)
+    im = im.resize((max(w, round(im.width * r)), max(h, round(im.height * r))), Image.LANCZOS, reducing_gap=2.0)
+    left, top = (im.width - w) // 2, (im.height - h) // 2
+    return im.crop((left, top, left + w, top + h))
+
+
+def screen_wallpaper(src: Path) -> Path:
+    """Copy of src at screen resolution (JPEG). An 8K webp costs Plasma ~150 MB and a slow decode on every
+    login/lock; the scaled copy is decoded once here and reused by wallpaper, lock screen and login screen."""
+    w, h = screen_size()
+    out = CACHE / "wallpapers" / src.parent.parent.name / f"{src.stem}-{w}x{h}.jpg"
+    if out.exists() and out.stat().st_mtime >= src.stat().st_mtime:
+        return out
+    from PIL import Image
+    with Image.open(src) as im:
+        if im.width <= w * 1.1 and im.height <= h * 1.1 and im.format == "JPEG":
+            return src  # already small enough
+        out.parent.mkdir(parents=True, exist_ok=True)
+        tmp = out.with_suffix(".tmp.jpg")
+        _cover(im, w, h).save(tmp, quality=90, optimize=True)
+        tmp.replace(out)
+    return out

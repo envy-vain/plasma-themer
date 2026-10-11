@@ -1,25 +1,30 @@
 // plasma-themer overlay picker.
 //   ←/→ or h/l  theme      ↑/↓ or k/j  wallpaper      Enter  apply      Esc  close      1-9  jump
+//
+// Deliberately effect-free: rounded cards and the blurred backdrop are pre-baked images (see picker.py),
+// so this runs on weak GPUs and on the software renderer. `lite` additionally drops animations and
+// translucency.
 import QtQuick
 import QtQuick.Window
-import QtQuick.Effects
 
 Window {
     id: win
     visible: true
     visibility: Window.FullScreen
     flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
-    color: "transparent"
+    color: lite ? (col.darker_background || "#000") : "transparent"
     title: "Themer"
 
     property var themes: []
     property int idx: 0
     property bool applying: false
+    property bool lite: false
     readonly property var cur: themes.length ? themes[idx] : null
     readonly property var col: cur ? cur.colors : ({})
     // wallpaper choice per theme lives here, NOT in `themes`: replacing the model array rebuilt every card
     property var bgSel: []
     function wp(t, i) { return t && t.wallpapers.length ? t.wallpapers[bgSel[i] ?? t.bg] : null }
+    function ms(n) { return lite ? 0 : n }
 
     Component.onCompleted: {
         const args = Qt.application.arguments
@@ -28,6 +33,7 @@ Window {
         xhr.open("GET", "file://" + path, false)
         xhr.send()
         const data = JSON.parse(xhr.responseText)
+        lite = !!data.lite
         bgSel = data.themes.map(t => t.bg)
         themes = data.themes
         idx = Math.max(0, themes.findIndex(t => t.slug === data.current))
@@ -50,15 +56,15 @@ Window {
     }
     function close() { root.opacity = 0; closeTimer.start() }
 
-    Timer { id: quitTimer; interval: 1700; onTriggered: win.close() }
-    Timer { id: closeTimer; interval: 220; onTriggered: Qt.quit() }
+    Timer { id: quitTimer; interval: lite ? 900 : 1700; onTriggered: win.close() }
+    Timer { id: closeTimer; interval: ms(220) + 1; onTriggered: Qt.quit() }
 
     Item {
         id: root
         anchors.fill: parent
         opacity: 0
         focus: true
-        Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+        Behavior on opacity { NumberAnimation { duration: ms(220); easing.type: Easing.OutCubic } }
 
         Keys.onPressed: (e) => {
             switch (e.key) {
@@ -75,27 +81,29 @@ Window {
             e.accepted = true
         }
 
-        // ---- blurred live backdrop: crossfades to the focused theme's wallpaper
+        // ---- backdrop: tiny pre-blurred images, upscaled (cheap) and crossfaded
         Repeater {
             model: themes
             Image {
+                required property var modelData
+                required property int index
                 anchors.fill: parent
-                source: wp(modelData, index) ? "file://" + wp(modelData, index).thumb : ""
+                source: wp(modelData, index) ? "file://" + wp(modelData, index).blur : ""
+                sourceSize: Qt.size(320, 180)
                 fillMode: Image.PreserveAspectCrop
+                smooth: true
+                cache: false
                 opacity: index === idx ? 1 : 0
                 visible: opacity > 0
-                Behavior on opacity { NumberAnimation { duration: 450; easing.type: Easing.InOutQuad } }
-                layer.enabled: true
-                layer.effect: MultiEffect { blurEnabled: true; blur: 1.0; blurMax: 64; brightness: -0.25; saturation: 0.1 }
+                Behavior on opacity { NumberAnimation { duration: ms(400); easing.type: Easing.InOutQuad } }
             }
         }
         Rectangle {
             anchors.fill: parent
             gradient: Gradient {
-                GradientStop { position: 0; color: Qt.alpha(col.darker_background || "#000", 0.55) }
-                GradientStop { position: 1; color: Qt.alpha(col.darker_background || "#000", 0.85) }
+                GradientStop { position: 0; color: Qt.alpha(col.darker_background || "#000", 0.45) }
+                GradientStop { position: 1; color: Qt.alpha(col.darker_background || "#000", 0.8) }
             }
-            Behavior on gradient { enabled: false }
         }
         MouseArea { anchors.fill: parent; onClicked: if (!applying) win.close() }
 
@@ -117,7 +125,6 @@ Window {
                 text: cur ? cur.name : ""
                 color: col.bright_foreground || "white"
                 font.pixelSize: 54; font.weight: Font.Light
-                Behavior on color { ColorAnimation { duration: 300 } }
             }
         }
 
@@ -130,11 +137,11 @@ Window {
             height: 420
             model: themes
             currentIndex: idx
-            pathItemCount: Math.min(themes.length, 5)
+            pathItemCount: Math.min(themes.length, lite ? 3 : 5)
             preferredHighlightBegin: 0.5
             preferredHighlightEnd: 0.5
             highlightRangeMode: PathView.StrictlyEnforceRange
-            highlightMoveDuration: 380
+            highlightMoveDuration: ms(380)
             interactive: false
             path: Path {
                 startX: list.width / 2 - list.step * list.pathItemCount / 2; startY: list.height / 2
@@ -147,36 +154,28 @@ Window {
                 required property int index
                 readonly property bool sel: index === idx
                 width: 460; height: 380
-                scale: sel ? (applying ? 1.08 : 1.0) : 0.82
+                scale: sel ? (applying && !lite ? 1.08 : 1.0) : 0.82
                 opacity: applying ? (sel ? 1 : 0) : (sel ? 1 : 0.45)
-                Behavior on scale { NumberAnimation { duration: 380; easing.type: Easing.OutBack; easing.overshoot: 1.4 } }
-                Behavior on opacity { NumberAnimation { duration: 300 } }
+                Behavior on scale { NumberAnimation { duration: ms(380); easing.type: Easing.OutBack; easing.overshoot: 1.4 } }
+                Behavior on opacity { NumberAnimation { duration: ms(300) } }
 
-                // glow
-                Rectangle {
-                    anchors.fill: frame; anchors.margins: -2; radius: 22
+                Rectangle {  // accent ring
+                    anchors.fill: frame; anchors.margins: -3; radius: 23
                     color: "transparent"
-                    border.width: card.sel ? 2 : 0
+                    visible: card.sel
+                    border.width: 2
                     border.color: card.modelData.colors.accent
                 }
                 Rectangle {
                     id: frame
                     width: parent.width; height: 300; radius: 20
                     color: card.modelData.colors.background
-                    Image {
-                        id: shot
+                    Image {  // pre-rounded PNG: no mask effect needed
                         anchors.fill: parent
-                        source: wp(card.modelData, card.index) ? "file://" + wp(card.modelData, card.index).thumb : ""
+                        source: wp(card.modelData, card.index) ? "file://" + wp(card.modelData, card.index).card : ""
+                        sourceSize: Qt.size(460, 300)
                         fillMode: Image.PreserveAspectCrop
-                        asynchronous: false
-                        visible: false
-                    }
-                    Rectangle { id: mask; anchors.fill: parent; radius: 20; visible: false; layer.enabled: true }
-                    MultiEffect {
-                        anchors.fill: parent
-                        source: shot
-                        maskEnabled: true
-                        maskSource: mask
+                        cache: false
                     }
                     // fake terminal snippet in the theme's colors
                     Rectangle {
@@ -204,12 +203,12 @@ Window {
                         spacing: 5
                         visible: card.sel && card.modelData.wallpapers.length > 1
                         Repeater {
-                            model: card.modelData.wallpapers.length
+                            model: card.sel ? card.modelData.wallpapers.length : 0
                             Rectangle {
                                 required property int index
                                 width: index === bgSel[card.index] ? 18 : 7; height: 7; radius: 4
                                 color: index === bgSel[card.index] ? card.modelData.colors.accent : Qt.alpha("white", 0.5)
-                                Behavior on width { NumberAnimation { duration: 200 } }
+                                Behavior on width { NumberAnimation { duration: ms(200) } }
                             }
                         }
                     }
@@ -252,11 +251,10 @@ Window {
                 width: 320; height: 4; radius: 2
                 color: Qt.alpha(col.foreground || "white", 0.15)
                 Rectangle {
-                    id: bar
                     height: parent.height; radius: 2
                     color: col.accent || "white"
-                    width: 0
-                    NumberAnimation on width { running: applying; from: 0; to: 320; duration: 1500; easing.type: Easing.OutCubic }
+                    width: lite ? parent.width : 0
+                    NumberAnimation on width { running: applying && !lite; from: 0; to: 320; duration: 1500; easing.type: Easing.OutCubic }
                 }
             }
         }

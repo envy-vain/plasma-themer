@@ -23,7 +23,22 @@ themer bg [next|prev]
 themer set nord --only konsole firefox     # run only some integrations
 themer setup                               # hotkeys, VSCodium theme extensions, Pywalfox host
 themer doctor                              # what's installed / wired up
+themer lite on|off|auto                    # lite mode for weak PCs (default: auto)
 ```
+
+## Weak hardware
+
+Built to stay light:
+
+- **Wallpapers are scaled to your screen once** and cached (`~/.cache/plasma-themer/wallpapers`). Upstream
+  wallpapers go up to 7680 px; Plasma, the lock screen and the login screen now load a screen-sized JPEG.
+- **The picker uses no shader effects.** Rounded cards and the blurred backdrop are pre-baked images
+  (`themer setup` bakes them on all cores), so it runs on weak iGPUs and, with no GPU, on Qt's software renderer.
+- **Nothing re-applies needlessly.** The color scheme and icon theme are skipped when unchanged (both make every
+  app repaint), files are only rewritten when their content changes, Konsole is driven over in-process D-Bus,
+  and the slow Electron CLI of VSCodium is never started during a switch.
+- **Lite mode** (auto-on with no GPU, ≤2 CPU cores or <4 GB RAM) drops picker animations and translucency and
+  makes Konsole opaque without blur. Force it with `themer lite on`.
 
 ## What switches
 

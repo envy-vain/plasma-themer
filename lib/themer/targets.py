@@ -9,8 +9,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from .core import (CACHE, rgb_csv, CURRENT, HOME, XDG_CACHE, XDG_CONFIG, XDG_DATA, Theme, have, kread, kwrite, log,
-                   render, run, state_get, write)
+from .core import (CACHE, CURRENT, HOME, XDG_CACHE, XDG_CONFIG, XDG_DATA, Theme, fonts, have, kread, kwrite, lite,
+                   log, render, rgb_csv, run, screen_wallpaper, state_get, state_set, write)
 
 TARGETS: list[tuple[str, callable]] = []
 
@@ -38,6 +38,10 @@ def _marker_ok(p: Path) -> bool:
 def plasma_colors(t: Theme, ctx: dict, wallpaper: Path | None):
     schemes = XDG_DATA / "color-schemes"
     cur = kread("kdeglobals", ["General"], "ColorScheme")
+    # Same colors already live? Skip the apply: it makes every Qt app repaint, which is slow on weak machines.
+    if cur.startswith("Themer") and (schemes / f"{cur}.colors").exists() and \
+            (schemes / f"{cur}.colors").read_text() == render("kde.colors", {**ctx, "scheme_id": cur}):
+        return "unchanged"
     sid = _ab(cur, "Themer")
     write(schemes / f"{sid}.colors", render("kde.colors", {**ctx, "scheme_id": sid}))
     # Write the accent keys first; applying the (alternating) scheme then broadcasts the change.
@@ -54,9 +58,10 @@ def plasma_colors(t: Theme, ctx: dict, wallpaper: Path | None):
 def plasma_wallpaper(t: Theme, ctx: dict, wallpaper: Path | None):
     if not wallpaper:
         return "theme has no backgrounds"
-    run("plasma-apply-wallpaperimage", str(wallpaper), check=True)
+    img = screen_wallpaper(wallpaper)  # screen-sized copy: less RAM in plasmashell, faster lock/login
+    run("plasma-apply-wallpaperimage", str(img), check=True)
     for k in ("Image", "PreviewImage"):
-        kwrite("kscreenlockerrc", ["Greeter", "Wallpaper", "org.kde.image", "General"], k, f"file://{wallpaper}")
+        kwrite("kscreenlockerrc", ["Greeter", "Wallpaper", "org.kde.image", "General"], k, f"file://{img}")
 
 
 def _icon_dirs() -> list[Path]:
@@ -78,6 +83,16 @@ def cursor(t: Theme, ctx: dict, wallpaper: Path | None):
     return want
 
 
+ICON_OVERLAY_VERSION = 3
+
+
+def _is_folder_icon(name: str) -> bool:
+    # Only folder names. Generic ones like network.svg would hijack KDE's name fallback:
+    # network-wireless-signal-excellent -> ... -> "network" turned the wifi tray icon into a folder.
+    stem = name.removesuffix(".svg")
+    return stem.startswith(("folder", "user-")) or stem == "inode-directory"
+
+
 @target("icons (Papirus folders)")
 def icons(t: Theme, ctx: dict, wallpaper: Path | None):
     papirus = Path("/usr/share/icons/Papirus")
@@ -85,8 +100,12 @@ def icons(t: Theme, ctx: dict, wallpaper: Path | None):
         return "skipped: papirus-icon-theme not installed"
     color = t.meta.get("folders", "blue")
     cur = kread("kdeglobals", ["Icons"], "Theme")
-    name = _ab(cur, "Themer-Papirus-")
+    # Name is unique per color + overlay version: KDE caches icon lookups by theme *name*, so reusing a name
+    # (the old A/B scheme) kept serving stale results from a previous overlay. Bump the version on changes.
+    name = f"Themer-Papirus-{color}-{ICON_OVERLAY_VERSION}"
     root = XDG_DATA / "icons" / name
+    if cur == name and (root / "index.theme").exists():
+        return f"{color} (unchanged)"  # an icon-theme switch flushes every app's icon cache: skip when we can
     shutil.rmtree(root, ignore_errors=True)
     dirs = []
     # Mirror papirus-folders without touching /usr: per-user overlay that only redirects folder icons
@@ -96,11 +115,11 @@ def icons(t: Theme, ctx: dict, wallpaper: Path | None):
             continue
         out = root / size_dir.name / "places"
         made = False
-        for f in places.iterdir():
-            if not f.is_symlink():
-                continue
+        with os.scandir(places) as it:
+            entries = [e.name for e in it if e.is_symlink() and _is_folder_icon(e.name)]
+        for fname in entries:
             # follow chains like inode-directory -> folder -> folder-blue until a "-blue" hop
-            hop, alt = f.name, None
+            hop, alt = fname, None
             for _ in range(6):
                 if not (places / hop).is_symlink():
                     break
@@ -108,23 +127,30 @@ def icons(t: Theme, ctx: dict, wallpaper: Path | None):
                 if "-blue" in hop:
                     alt = hop.replace("-blue", f"-{color}")
                     break
-            if not alt:
-                continue
-            if (places / alt).exists():
+            if alt and (places / alt).exists():
                 out.mkdir(parents=True, exist_ok=True)
-                (out / f.name).symlink_to(places / alt)
+                (out / fname).symlink_to(places / alt)
                 made = True
         if made:
             dirs.append(size_dir.name)
     sections = "".join(
         f"\n[{d}/places]\nSize={d.split('x')[0]}\nContext=Places\nType=Fixed\n" for d in dirs)
+    # Copy Papirus-Dark's header (FollowsColorScheme, Panel/Toolbar sizes...): without it Plasma treats the
+    # overlay as a different kind of theme and the tray picked wrong icons (wifi showed a network folder).
+    header = []
+    for line in (Path("/usr/share/icons/Papirus-Dark/index.theme")).read_text().splitlines()[1:]:
+        if line.startswith("[") or line.startswith("Directories="):
+            break
+        if line and not line.startswith(("Name", "Comment", "Inherits", "#")):
+            header.append(line)
     write(root / "index.theme",
           f"[Icon Theme]\nName={name}\nComment=plasma-themer folder overlay ({color})\n"
-          f"Inherits=Papirus-Dark,breeze-dark,hicolor\nDirectories={','.join(d + '/places' for d in dirs)}\n"
-          + sections)
+          f"Inherits=Papirus-Dark,breeze-dark,hicolor\n" + "\n".join(header) + "\n"
+          f"Directories={','.join(d + '/places' for d in dirs)}\n" + sections)
     run("/usr/lib/plasma-changeicons", name, check=True)
-    old = XDG_DATA / "icons" / _ab(name, "Themer-Papirus-")
-    shutil.rmtree(old, ignore_errors=True)
+    for old in (XDG_DATA / "icons").glob("Themer-Papirus-*"):
+        if old.name != name:
+            shutil.rmtree(old, ignore_errors=True)
     return color
 
 
@@ -157,15 +183,35 @@ def konsole(t: Theme, ctx: dict, wallpaper: Path | None):
         cp.write(f, space_around_delimiters=False)
     (kdir / f"{_ab(sid, 'Themer')}.colorscheme").unlink(missing_ok=True)
     kwrite("konsolerc", ["Desktop Entry"], "DefaultProfile", "Themer.profile")
-    # live: switch every open session
-    n = 0
-    for svc in run("qdbus6").stdout.split():
-        if svc.startswith("org.kde.konsole") or svc.startswith("org.kde.yakuake"):
-            for path in run("qdbus6", svc).stdout.split():
-                if re.fullmatch(r"/Sessions/\d+", path):
-                    run("qdbus6", svc, path, "org.kde.konsole.Session.setProfile", "Themer")
-                    n += 1
+    # live: switch every open session (in-process D-Bus; one qdbus6 process per call is slow on weak CPUs)
+    n = _konsole_set_profile_all("Themer")
     return f"{n} live sessions"
+
+
+def _konsole_set_profile_all(profile: str) -> int:
+    try:
+        import dbus
+        bus = dbus.SessionBus()
+        n = 0
+        for svc in bus.list_names():
+            if not svc.startswith(("org.kde.konsole", "org.kde.yakuake")):
+                continue
+            xml = bus.get_object(svc, "/Sessions", introspect=False).Introspect(
+                dbus_interface="org.freedesktop.DBus.Introspectable")
+            for sid in re.findall(r'<node name="(\d+)"', str(xml)):  # ids have gaps after closed tabs
+                obj = bus.get_object(svc, f"/Sessions/{sid}", introspect=False)
+                obj.setProfile(profile, dbus_interface="org.kde.konsole.Session")
+                n += 1
+        return n
+    except ImportError:
+        n = 0
+        for svc in run("qdbus6").stdout.split():
+            if svc.startswith(("org.kde.konsole", "org.kde.yakuake")):
+                for path in run("qdbus6", svc).stdout.split():
+                    if re.fullmatch(r"/Sessions/\d+", path):
+                        run("qdbus6", svc, path, "org.kde.konsole.Session.setProfile", profile)
+                        n += 1
+        return n
 
 
 @target("alacritty")
@@ -206,7 +252,7 @@ style = {{ shape = "Beam", blinking = "On" }}
 
 
 def _font_installed(family: str) -> bool:
-    return family.lower() in run("fc-list", ":", "family").stdout.lower()
+    return family.lower() in fonts()  # fc-list once per run, not per target
 
 
 # ---------------------------------------------------------------- shell + CLI
@@ -240,11 +286,16 @@ def fish(t: Theme, ctx: dict, wallpaper: Path | None):
         "pure_color_light": c["bright_foreground"], "pure_color_dark": c["background"],
         "pure_color_normal": c["foreground"],
     }
+    # fish's `set` stops option parsing after the name, so --background=... values need no `--`
     script = "".join(f"set -U {k} {val}\n" for k, val in v.items())
     script += f"set -Ux FZF_DEFAULT_OPTS_FILE {CURRENT / 'fzf.opts'}\nset -Ux BAT_THEME ansi\n"
-    r = subprocess.run(["fish", "--no-config", "-c", "source"], input=script, text=True, capture_output=True)
-    if r.returncode:
-        raise RuntimeError(r.stderr)
+    # Not --no-config: in fish 4 that also disables universal variables (they'd never be saved).
+    # The user's config.fish may print a fetch on startup, so stdout is discarded.
+    script += "echo themer-ok >&2\n"
+    r = subprocess.run(["fish", "-c", script], text=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.PIPE, timeout=15)
+    if "themer-ok" not in r.stderr:
+        raise RuntimeError(r.stderr.strip()[-300:] or f"fish exited {r.returncode}")
 
 
 @target("btop")
@@ -366,7 +417,9 @@ def vscodium(t: Theme, ctx: dict, wallpaper: Path | None):
         txt = re.sub(r",(\s*)\}\s*$", r"\1}\n", txt)  # `{ "x": 1, }` if file was empty
     write(settings, txt)
     ext = t.vscode.get("extension")
-    if ext and have("codium") and ext.lower() not in run("codium", "--list-extensions").stdout.lower():
+    # check the extensions dir instead of `codium --list-extensions` (that boots Electron: ~0.3s fast PC, seconds slow)
+    ext_dir = HOME / ".vscode-oss/extensions"
+    if ext and ext_dir.is_dir() and not any(d.name.lower().startswith(ext.lower() + "-") for d in ext_dir.iterdir()):
         return f"WARN: theme extension {ext} missing — run: themer setup"
 
 
@@ -417,8 +470,13 @@ def login_screen(t: Theme, ctx: dict, wallpaper: Path | None):
         return "skipped: run install/system-setup.sh once"
     if not wallpaper:
         return "no wallpaper"
-    from PIL import Image
     tmp = root / ".login-background.tmp.jpg"
-    Image.open(wallpaper).convert("RGB").save(tmp, quality=92)
+    src = screen_wallpaper(wallpaper)  # already decoded + scaled once; this is just a file copy
+    if src.suffix.lower() in (".jpg", ".jpeg"):
+        shutil.copyfile(src, tmp)
+    else:
+        from PIL import Image
+        with Image.open(src) as im:
+            im.convert("RGB").save(tmp, quality=90)
     os.chmod(tmp, 0o644)
     tmp.replace(root / "login-background.jpg")

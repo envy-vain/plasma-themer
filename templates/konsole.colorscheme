@@ -30,11 +30,11 @@ Color={{ c.bright_foreground | rgb }}
 
 [General]
 Anchor=0.5,0.5
-Blur=true
+Blur={{ 'false' if lite else 'true' }}
 ColorRandomization=false
 Description={{ name }} (themer)
 FillStyle=Tile
-Opacity=0.92
+Opacity={{ '1' if lite else '0.92' }}
 Wallpaper=
 WallpaperFlipType=NoFlip
 WallpaperOpacity=1

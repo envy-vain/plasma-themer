@@ -77,8 +77,14 @@ def pywalfox() -> list[str]:
     return ["native host installed — now add the add-on: https://addons.mozilla.org/firefox/addon/pywalfox/"]
 
 
+def prebake() -> list[str]:
+    from .picker import warm
+    return [f"{warm()} wallpaper(s) scaled + picker art baked"]
+
+
 def setup() -> int:
-    for title, fn in (("Shortcuts", shortcuts), ("VSCodium", vscodium_extensions), ("Pywalfox", pywalfox)):
+    for title, fn in (("Shortcuts", shortcuts), ("VSCodium", vscodium_extensions), ("Pywalfox", pywalfox),
+                      ("Wallpaper cache", prebake)):
         print(f"\033[1m{title}\033[0m")
         for line in fn():
             print("  " + line)
