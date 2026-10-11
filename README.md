@@ -66,7 +66,7 @@ Built to stay light:
 | Wallpaper + lock screen | `plasma-apply-wallpaperimage`, `kscreenlockerrc` |
 | Login screen | Plasma Login Manager / SDDM Breeze read files in the user-owned `/var/lib/plasma-themer` |
 | Cursor | Bibata (Ice / Amber / Classic per theme) |
-| Icons | Papirus-Dark + per-user overlay that recolors folders (no root, `/usr` untouched) |
+| Icons | Breeze Dark (monochrome, follows the theme colors) + black folders with pastel accents (per-user overlay, `/usr` untouched) |
 | GTK apps | follow the Plasma scheme automatically |
 | Konsole | generated colorscheme, live-switched over D-Bus in every open session |
 | Alacritty | imported theme file, live reload |

@@ -84,7 +84,7 @@ def cursor(t: Theme, ctx: dict, wallpaper: Path | None):
     return want
 
 
-ICON_OVERLAY_VERSION = 5
+ICON_OVERLAY_VERSION = 6
 
 
 def _tint_folder(svg: str, tint: str) -> str:
@@ -163,17 +163,18 @@ def icons(t: Theme, ctx: dict, wallpaper: Path | None):
             dirs.append(size_dir.name)
     sections = "".join(
         f"\n[{d}/places]\nSize={d.split('x')[0]}\nContext=Places\nType=Fixed\n" for d in dirs)
-    # Copy Papirus-Dark's header (FollowsColorScheme, Panel/Toolbar sizes...): without it Plasma treats the
-    # overlay as a different kind of theme and the tray picked wrong icons (wifi showed a network folder).
+    # Everything except folders comes from Breeze Dark: flat, monochrome and FollowsColorScheme, so tray/popup
+    # icons take the theme's text color (Papirus' colorful status icons looked out of place). Papirus-Dark is
+    # only a fallback for app icons Breeze lacks. Header copied from breeze-dark so Plasma treats it the same.
     header = []
-    for line in (Path("/usr/share/icons/Papirus-Dark/index.theme")).read_text().splitlines()[1:]:
-        if line.startswith("[") or line.startswith("Directories="):
+    for line in Path("/usr/share/icons/breeze-dark/index.theme").read_text().splitlines()[1:]:
+        if line.startswith("[") or line.startswith(("Directories=", "ScaledDirectories=")):
             break
-        if line and not line.startswith(("Name", "Comment", "Inherits", "#")):
+        if "=" in line and not line.startswith(("Name", "Comment", "Inherits", "#")):
             header.append(line)
     write(root / "index.theme",
-          f"[Icon Theme]\nName={name}\nComment=plasma-themer folder overlay ({color})\n"
-          f"Inherits=Papirus-Dark,breeze-dark,hicolor\n" + "\n".join(header) + "\n"
+          f"[Icon Theme]\nName={name}\nComment=plasma-themer: Breeze Dark + black pastel folders\n"
+          f"Inherits=breeze-dark,Papirus-Dark,hicolor\n" + "\n".join(header) + "\n"
           f"Directories={','.join(d + '/places' for d in dirs)}\n" + sections)
     _apply_icon_theme(name)
     for old in (XDG_DATA / "icons").glob("Themer-Papirus-*"):
