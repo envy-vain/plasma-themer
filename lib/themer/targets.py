@@ -9,7 +9,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from .core import (CACHE, CURRENT, HOME, XDG_CACHE, XDG_CONFIG, XDG_DATA, Theme, app_config, changeicons_tool, fonts,
+from .core import (CACHE, CURRENT, mix, HOME, XDG_CACHE, XDG_CONFIG, XDG_DATA, Theme, app_config, changeicons_tool, fonts,
                    have, kread, kwrite, lite, log, render, rgb_csv, run, screen_wallpaper, state_get, state_set,
                    write)
 
@@ -84,7 +84,21 @@ def cursor(t: Theme, ctx: dict, wallpaper: Path | None):
     return want
 
 
-ICON_OVERLAY_VERSION = 3
+ICON_OVERLAY_VERSION = 5
+
+
+def _tint_folder(svg: str, tint: str) -> str:
+    """Papirus black folders: dark body/tab, a light paper strip (#dcdcdc) and a light-grey symbol (#c2c2c2 etc).
+    Every light grey becomes the pastel tint; the strip gets a slightly deeper shade so it still reads as paper."""
+    from .core import luminance
+    strip = mix(tint, "#000000", 0.15)
+
+    def repl(m):
+        h = m.group(0)
+        if len(h) != 7 or luminance(h) < 0.3:
+            return h  # dark body/tab colors stay black
+        return strip if h.lower() in ("#dcdcdc", "#e4e4e4") else tint
+    return re.sub(r"#[0-9a-fA-F]{6}\b", repl, svg)
 
 
 def _is_folder_icon(name: str) -> bool:
@@ -99,7 +113,12 @@ def icons(t: Theme, ctx: dict, wallpaper: Path | None):
     papirus = Path("/usr/share/icons/Papirus")
     if not papirus.is_dir():
         return "skipped: papirus-icon-theme not installed"
-    color = t.meta.get("folders", "blue")
+    color = t.meta.get("folders", "black-pastel")
+    pastel = color.endswith("-pastel")
+    if pastel:  # base Papirus color + accent-tinted symbol/strip, generated per accent
+        base = color.removesuffix("-pastel")
+        tint = mix(ctx["c"]["accent"], "#ffffff", 0.3)
+        color = f"{base}-{tint.lstrip('#')}"
     cur = kread("kdeglobals", ["Icons"], "Theme")
     # Name is unique per color + overlay version: KDE caches icon lookups by theme *name*, so reusing a name
     # (the old A/B scheme) kept serving stale results from a previous overlay. Bump the version on changes.
@@ -131,9 +150,14 @@ def icons(t: Theme, ctx: dict, wallpaper: Path | None):
                 if "-blue" in hop:
                     alt = hop.replace("-blue", f"-{color}")
                     break
+            if pastel and alt:
+                alt = alt.replace(f"-{color}", f"-{base}")
             if alt and (places / alt).exists():
                 out.mkdir(parents=True, exist_ok=True)
-                (out / fname).symlink_to(places / alt)
+                if pastel:
+                    (out / fname).write_text(_tint_folder((places / alt).resolve().read_text(), tint))
+                else:
+                    (out / fname).symlink_to(places / alt)
                 made = True
         if made:
             dirs.append(size_dir.name)
