@@ -15,7 +15,7 @@ import threading
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
-from .core import CACHE, REPO, list_themes, lite, load_theme, screen_wallpaper, state_get, state_set
+from .core import CACHE, REPO, list_themes, lite, load_theme, qml_runtime, screen_wallpaper, state_get, state_set
 
 ART = CACHE / "picker"
 CARD_W, CARD_H, RADIUS = 460, 300, 20
@@ -103,7 +103,12 @@ def run_picker(apply) -> int:
            "QT_FORCE_STDERR_LOGGING": "1"}
     if not any(Path("/dev/dri").glob("renderD*")):
         env["QT_QUICK_BACKEND"] = "software"  # no GPU: the picker uses no shaders, so this just works
-    proc = subprocess.Popen(["qml6", str(REPO / "picker/Picker.qml"), "--", str(data_file)],
+    qml = qml_runtime()
+    if not qml:
+        print("themer: no Qt 6 QML runtime found (Arch: qt6-declarative, Fedora: qt6-qtdeclarative-devel, "
+              "Debian/Ubuntu: qml-qt6 qml6-module-qtquick qml6-module-qtquick-window)")
+        return 1
+    proc = subprocess.Popen([qml, str(REPO / "picker/Picker.qml"), "--", str(data_file)],
                             stderr=subprocess.PIPE, stdout=subprocess.DEVNULL, text=True, env=env)
     worker = None
     for line in proc.stderr:

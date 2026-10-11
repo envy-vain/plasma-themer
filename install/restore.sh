@@ -36,6 +36,12 @@ done
 if [[ -f /etc/plasmalogin.conf.pre-themer ]]; then
   echo "Login screen: run  sudo cp /etc/plasmalogin.conf.pre-themer /etc/plasmalogin.conf"
 fi
+if [[ -L /usr/share/sddm/themes/breeze/theme.conf.user ]]; then
+  echo "Login screen: run  sudo rm /usr/share/sddm/themes/breeze/theme.conf.user"
+  [[ -f /usr/share/sddm/themes/breeze/theme.conf.user.pre-themer ]] &&
+    echo "              then sudo mv /usr/share/sddm/themes/breeze/theme.conf.user.pre-themer /usr/share/sddm/themes/breeze/theme.conf.user"
+fi
+for f in "$HOME"/.vscode-oss/extensions/local.plasma-themer-*; do [[ -e $f ]] && rm -rf -- "$f"; done
 
 # reapply to the live session
 if command -v plasma-apply-colorscheme >/dev/null; then

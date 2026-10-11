@@ -3,9 +3,27 @@
 Omarchy-style, one-keystroke theme switching for KDE Plasma 6 (Wayland). One palette per theme drives the
 whole desktop: Plasma, terminals, shell, browser, editor, chat, notes and the login screen.
 
-Themes: **Tokyo Night · Matte Black · Catppuccin Mocha · Rosé Pine · Gruvbox · Everforest · Nord · Kanagawa**
-(palettes and most wallpapers from [Omarchy](https://github.com/basecamp/omarchy); Rosé Pine uses the dark
-"main" palette and generated wallpapers).
+Themes: **Tokyo Night · Matte Black · Catppuccin Mocha · Rosé Pine · Gruvbox · Everforest · Nord · Kanagawa ·
+Cachy Night · Ethereal · Last Horizon · Vantablack**
+
+Palettes and most wallpapers come from [Omarchy](https://github.com/basecamp/omarchy) (MIT), as does the template
+for the generated VSCodium theme. Rosé Pine uses the dark "main" palette. **Cachy Night** is original: near-black,
+violet accent, warm gold, Nord-ish terminal colors. Every theme also gets generated wallpapers (`gen-*`).
+
+## Install
+
+Any distro with **KDE Plasma 6** and Python 3.11+: Arch/CachyOS/EndeavourOS/Manjaro, Fedora KDE,
+Kubuntu/KDE neon/Debian, openSUSE.
+
+```
+git clone https://github.com/envy-vain/plasma-themer ~/.local/share/plasma-themer-src
+~/.local/share/plasma-themer-src/install.sh          # add --no-system to skip anything needing sudo
+```
+
+The installer backs up your configs first, takes btrfs snapshots if your system supports them, installs
+what your distro packages (falling back to Flatpak / pip / upstream releases for the rest), and skips whatever
+isn't available. The login screen is themed on Plasma Login Manager and SDDM (Breeze). Firefox, VSCodium and
+Vesktop are found whether installed natively, as a Snap (Firefox) or as a Flatpak.
 
 ## Keys
 
@@ -46,7 +64,7 @@ Built to stay light:
 |---|---|
 | Plasma colors + accent | generated `.colors`, alternating ids so KDE always reloads |
 | Wallpaper + lock screen | `plasma-apply-wallpaperimage`, `kscreenlockerrc` |
-| Login screen | Plasma Login Manager reads `/var/lib/plasma-themer/login-background.jpg` |
+| Login screen | Plasma Login Manager / SDDM Breeze read files in the user-owned `/var/lib/plasma-themer` |
 | Cursor | Bibata (Ice / Amber / Classic per theme) |
 | Icons | Papirus-Dark + per-user overlay that recolors folders (no root, `/usr` untouched) |
 | GTK apps | follow the Plasma scheme automatically |
@@ -55,15 +73,18 @@ Built to stay light:
 | fish | universal `fish_color_*` + Pure prompt colors (live in every shell), fzf, `BAT_THEME=ansi` |
 | btop · tmux · vim · fastfetch | generated theme files, live where the app supports it |
 | Firefox | Pywalfox for live UI colors + `userChrome.css`/`userContent.css` for shape, new-tab page, about: pages |
-| VSCodium | `workbench.colorTheme` (settings file is watched → instant) |
+| VSCodium | `workbench.colorTheme`; themes without a published one get a theme generated from the palette |
 | Vesktop | `themes/plasma-themer.css` (hot reload) |
 | Obsidian | CSS snippet in every vault (hot reload) |
+
+Known limit: Dolphin windows that are already open keep their old folder colors until you change folder or
+reopen them (KDE doesn't redraw them); everything else updates live.
 
 ## Adding a theme
 
 `themes/<slug>/colors.toml` (same keys as Omarchy), `theme.toml` (`name`, `cursor`, `folders`),
 optional `vscode.json` and `backgrounds/`. Personal themes can live in `~/.config/plasma-themer/themes/`.
-`tools/genwall.py <slug> --style waves|aurora|dunes` paints matching wallpapers from the palette.
+`tools/genwall.py <slug> --style waves|aurora|dunes|ascii` paints matching wallpapers from the palette.
 
 ## Undo
 

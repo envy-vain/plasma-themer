@@ -13,7 +13,7 @@ from . import core
 from .core import CURRENT, Theme, have, list_themes, load_theme, log, run, state_get, state_set
 from .targets import TARGETS
 
-SEQUENTIAL = {"plasma colors + accent", "wallpaper + lock screen", "mouse cursor", "icons (Papirus folders)"}
+SEQUENTIAL = {"plasma colors + accent", "icons (Papirus folders)"}  # both write kdeglobals: keep ordered
 TTY = sys.stdout.isatty()
 
 

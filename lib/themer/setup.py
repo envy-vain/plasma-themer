@@ -5,7 +5,7 @@ import os
 import shutil
 from pathlib import Path
 
-from .core import HOME, REPO, kwrite, XDG_CONFIG, XDG_DATA, have, list_themes, load_theme, run, state_get
+from .core import HOME, REPO, kwrite, qml_runtime, XDG_CONFIG, XDG_DATA, have, list_themes, load_theme, run, state_get
 from .targets import _firefox_profile, _icon_theme_exists
 
 # Qt key codes: Meta | Ctrl | Shift | Space
@@ -95,7 +95,7 @@ def setup() -> int:
 
 def doctor() -> int:
     checks = [
-        ("qml6 (picker)", have("qml6")),
+        ("QML runtime (picker)", bool(qml_runtime())),
         ("Papirus icons", Path("/usr/share/icons/Papirus").is_dir()),
         ("Bibata cursors", _icon_theme_exists("Bibata-Modern-Ice")),
         ("JetBrainsMono Nerd Font", "jetbrainsmono nerd" in run("fc-list").stdout.lower()),

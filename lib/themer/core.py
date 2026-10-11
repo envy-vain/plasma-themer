@@ -86,6 +86,11 @@ class Theme:
     def context(self) -> dict:
         """Everything templates can use."""
         c = dict(self.colors)
+        # Not every upstream palette defines every key: derive the missing ones
+        c.setdefault("orange", mix(c["red"], c["yellow"], 0.5))
+        c.setdefault("brown", mix(c["orange"], c["background"], 0.55))
+        for k in ("red", "yellow", "green", "cyan", "blue", "magenta"):
+            c.setdefault(f"bright_{k}", mix(c[k], "#ffffff", 0.2))
         c.setdefault("selection_background", c["selection"])
         c.setdefault("selection_foreground", c["bright_foreground"])
         c["accent_foreground"] = contrast_on(c["accent"], c["bright_foreground"], c["darker_background"])
@@ -191,6 +196,37 @@ def log(msg: str) -> None:
     LOG.parent.mkdir(parents=True, exist_ok=True)
     with LOG.open("a") as f:
         f.write(msg.rstrip() + "\n")
+
+
+@cache
+def find_tool(*candidates: str) -> str | None:
+    """First existing command or absolute path. Distros name/place Qt and Plasma helpers differently."""
+    from shutil import which
+    for c in candidates:
+        if c.startswith("/"):
+            if os.access(c, os.X_OK):
+                return c
+        elif which(c):
+            return which(c)
+    return None
+
+
+def qml_runtime() -> str | None:
+    return find_tool("qml6", "qml-qt6", "/usr/lib/qt6/bin/qml", "/usr/lib64/qt6/bin/qml",
+                     "/usr/lib/x86_64-linux-gnu/qt6/bin/qml", "/usr/lib/aarch64-linux-gnu/qt6/bin/qml",
+                     "/usr/libexec/qt6/qml")
+
+
+def changeicons_tool() -> str | None:
+    return find_tool("/usr/lib/plasma-changeicons", "/usr/libexec/plasma-changeicons",
+                     "/usr/lib64/libexec/plasma-changeicons", "/usr/lib/x86_64-linux-gnu/libexec/plasma-changeicons",
+                     "/usr/lib/aarch64-linux-gnu/libexec/plasma-changeicons", "/usr/libexec/kf6/plasma-changeicons")
+
+
+def app_config(native: Path, flatpak_id: str, sub: str) -> Path:
+    """Config dir of an app that may be installed natively or as a Flatpak."""
+    fp = HOME / ".var/app" / flatpak_id / "config" / sub
+    return fp if not native.exists() and fp.parent.exists() else native
 
 
 @cache

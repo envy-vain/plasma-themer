@@ -90,7 +90,56 @@ def dunes(c, w, h, rng):
     return img
 
 
-STYLES = {"waves": waves, "aurora": aurora, "dunes": dunes}
+def _font(size):
+    from PIL import ImageFont
+    import subprocess
+    try:
+        path = subprocess.run(["fc-match", "-f", "%{file}", "monospace:bold"], capture_output=True, text=True).stdout
+        return ImageFont.truetype(path, size)
+    except Exception:  # noqa: BLE001
+        return ImageFont.load_default()
+
+
+def ascii_art(c, w, h, rng):
+    """Dot/ASCII-matrix render of a lit moon over a drifting sea (the old desktop's wallpaper style)."""
+    from PIL import Image, ImageDraw
+    cw, ch = max(8, w // 200), max(12, w // 130)  # glyph cell
+    cols, rows = w // cw, h // ch
+    y, x = np.mgrid[0:rows, 0:cols].astype(np.float32)
+    nx, ny = x / cols, y / rows
+    aspect = (cols * cw) / (rows * ch)
+    # moon: sphere shading lit from the upper left, plus soft craters
+    mx, my, r = 0.62 + rng.random() * 0.12, 0.34, 0.17
+    dx, dy = (nx - mx) * aspect, ny - my
+    d = np.sqrt(dx ** 2 + dy ** 2) / r
+    z = np.sqrt(np.clip(1 - d ** 2, 0, 1))
+    light = np.clip((-dx / r * 0.55 - dy / r * 0.45 + z * 0.8), 0, 1) * (d < 1)
+    for _ in range(7):
+        cx, cy, cr = rng.normal(0, 0.45, 2).tolist() + [0.08 + rng.random() * 0.12]
+        light *= 1 - 0.35 * np.exp(-(((dx / r - cx) ** 2 + (dy / r - cy) ** 2) / cr ** 2))
+    # sea: horizontal bands that catch the moonlight under it
+    sea = (ny > 0.62) * np.clip(np.sin(nx * 40 + ny * 90 + rng.random() * 6) * 0.5 + 0.5, 0, 1)
+    sea *= np.exp(-((nx - mx) * aspect / 0.18) ** 2) * np.clip((ny - 0.62) * 3, 0, 1) * 0.8
+    glow = np.exp(-((d - 1) / 0.35) ** 2) * 0.12 * (d >= 1)
+    field = np.clip(np.maximum(light, sea) + glow, 0, 1)
+
+    img = Image.new("RGB", (w, h), tuple(int(v) for v in rgb(c["background"])))
+    draw = ImageDraw.Draw(img)
+    font = _font(ch - 2)
+    ramp = " .·:-=+*#%@"
+    lo, mid, hi = rgb(c["muted"]), rgb(c["accent"]), rgb(c["yellow"])
+    for j in range(rows):
+        for i in range(cols):
+            v = field[j, i]
+            if v < 0.04:
+                continue
+            g = ramp[min(len(ramp) - 1, int(v * len(ramp)))]
+            col = lo + (mid - lo) * min(1, v * 1.6) if v < 0.6 else mid + (hi - mid) * (v - 0.6) / 0.4
+            draw.text((i * cw, j * ch), g, fill=tuple(int(t) for t in col), font=font)
+    return np.asarray(img).astype(np.float32)
+
+
+STYLES = {"waves": waves, "aurora": aurora, "dunes": dunes, "ascii": ascii_art}
 
 
 def main():
@@ -106,8 +155,11 @@ def main():
     w, h = map(int, a.size.split("x"))
     rng = np.random.default_rng(a.seed)
     img = STYLES[a.style](c, w, h, rng)
-    img += rng.normal(0, 2.2, img.shape)  # film grain kills banding
-    im = Image.fromarray(np.clip(img, 0, 255).astype(np.uint8)).filter(ImageFilter.SMOOTH)
+    if a.style != "ascii":
+        img += rng.normal(0, 2.2, img.shape)  # film grain kills banding
+    im = Image.fromarray(np.clip(img, 0, 255).astype(np.uint8))
+    if a.style != "ascii":
+        im = im.filter(ImageFilter.SMOOTH)
     out = Path(a.out) if a.out else tdir / "backgrounds" / f"gen-{a.style}.jpg"
     out.parent.mkdir(parents=True, exist_ok=True)
     im.save(out, quality=92)

@@ -9,8 +9,9 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from .core import (CACHE, CURRENT, HOME, XDG_CACHE, XDG_CONFIG, XDG_DATA, Theme, fonts, have, kread, kwrite, lite,
-                   log, render, rgb_csv, run, screen_wallpaper, state_get, state_set, write)
+from .core import (CACHE, CURRENT, HOME, XDG_CACHE, XDG_CONFIG, XDG_DATA, Theme, app_config, changeicons_tool, fonts,
+                   have, kread, kwrite, lite, log, render, rgb_csv, run, screen_wallpaper, state_get, state_set,
+                   write)
 
 TARGETS: list[tuple[str, callable]] = []
 
@@ -106,6 +107,9 @@ def icons(t: Theme, ctx: dict, wallpaper: Path | None):
     root = XDG_DATA / "icons" / name
     if cur == name and (root / "index.theme").exists():
         return f"{color} (unchanged)"  # an icon-theme switch flushes every app's icon cache: skip when we can
+    if (root / "index.theme").exists():  # built before for this color: just switch (overlays are tiny)
+        _apply_icon_theme(name)
+        return f"{color} (cached)"
     shutil.rmtree(root, ignore_errors=True)
     dirs = []
     # Mirror papirus-folders without touching /usr: per-user overlay that only redirects folder icons
@@ -147,11 +151,24 @@ def icons(t: Theme, ctx: dict, wallpaper: Path | None):
           f"[Icon Theme]\nName={name}\nComment=plasma-themer folder overlay ({color})\n"
           f"Inherits=Papirus-Dark,breeze-dark,hicolor\n" + "\n".join(header) + "\n"
           f"Directories={','.join(d + '/places' for d in dirs)}\n" + sections)
-    run("/usr/lib/plasma-changeicons", name, check=True)
+    _apply_icon_theme(name)
     for old in (XDG_DATA / "icons").glob("Themer-Papirus-*"):
-        if old.name != name:
+        if not old.name.endswith(f"-{ICON_OVERLAY_VERSION}"):  # only drop overlays from older versions
             shutil.rmtree(old, ignore_errors=True)
     return color
+
+
+def _apply_icon_theme(name: str) -> None:
+    # plasma-changeicons is ~0.5 s, but setting the key + broadcasting KIconLoader/KGlobalSettings signals
+    # ourselves didn't reliably refresh running apps (Dolphin kept old folder colors), so only fall back to that.
+    tool = changeicons_tool()
+    if tool:
+        run(tool, name, check=True)
+        return
+    kwrite("kdeglobals", ["Icons"], "Theme", name)
+    run("dbus-send", "--session", "--type=signal", "/KIconLoader", "org.kde.KIconLoader.iconChanged", "int32:0")
+    run("dbus-send", "--session", "--type=signal", "/KGlobalSettings", "org.kde.KGlobalSettings.notifyChange",
+        "int32:4", "int32:0")
 
 
 # ---------------------------------------------------------------- terminals
@@ -220,7 +237,7 @@ def alacritty(t: Theme, ctx: dict, wallpaper: Path | None):
     write(theme_file, render("alacritty.toml", ctx))
     cfg = XDG_CONFIG / "alacritty/alacritty.toml"
     if not cfg.exists():
-        font = "JetBrainsMono Nerd Font" if _font_installed("JetBrainsMono Nerd Font") else "FantasqueSansM Nerd Font"
+        font = "JetBrainsMono Nerd Font" if _font_installed("JetBrainsMono Nerd Font") else "monospace"
         write(cfg, f"""# plasma-themer: colors are imported from the active theme (live-reloads on switch)
 [general]
 import = ["{theme_file}"]
@@ -289,11 +306,19 @@ def fish(t: Theme, ctx: dict, wallpaper: Path | None):
     # fish's `set` stops option parsing after the name, so --background=... values need no `--`
     script = "".join(f"set -U {k} {val}\n" for k, val in v.items())
     script += f"set -Ux FZF_DEFAULT_OPTS_FILE {CURRENT / 'fzf.opts'}\nset -Ux BAT_THEME ansi\n"
-    # Not --no-config: in fish 4 that also disables universal variables (they'd never be saved).
-    # The user's config.fish may print a fetch on startup, so stdout is discarded.
+    # --no-config would also disable universal variables (fish 4), and the user's config.fish may run slow things
+    # (a fetch on every start). So point fish at a throwaway config dir whose only file is a symlink to the real
+    # fish_variables: no user config runs, and fish writes through the symlink to the real file.
+    import tempfile
+    real = XDG_CONFIG / "fish/fish_variables"
     script += "echo themer-ok >&2\n"
-    r = subprocess.run(["fish", "-c", script], text=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                       stderr=subprocess.PIPE, timeout=15)
+    with tempfile.TemporaryDirectory() as tmp:
+        (Path(tmp) / "fish").mkdir()
+        if real.exists():
+            (Path(tmp) / "fish/fish_variables").symlink_to(real.resolve())
+        env = {**os.environ, "XDG_CONFIG_HOME": tmp}
+        r = subprocess.run(["fish", "-c", script], text=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.PIPE, timeout=15, env=env)
     if "themer-ok" not in r.stderr:
         raise RuntimeError(r.stderr.strip()[-300:] or f"fish exited {r.returncode}")
 
@@ -348,7 +373,9 @@ def fastfetch(t: Theme, ctx: dict, wallpaper: Path | None):
 # ---------------------------------------------------------------- apps
 
 def _firefox_profile() -> Path | None:
-    for base in (XDG_CONFIG / "mozilla/firefox", HOME / ".mozilla/firefox"):
+    for base in (XDG_CONFIG / "mozilla/firefox", HOME / ".mozilla/firefox",
+                 HOME / "snap/firefox/common/.mozilla/firefox",              # Ubuntu's snap
+                 HOME / ".var/app/org.mozilla.firefox/.mozilla/firefox"):   # Flatpak
         ini = base / "installs.ini"
         if ini.exists():
             cp = configparser.ConfigParser(interpolation=None)
@@ -393,21 +420,60 @@ def firefox(t: Theme, ctx: dict, wallpaper: Path | None):
         notes.append("restart Firefox once to enable userChrome")
     # Pywalfox: live recolor of the browser UI
     write(XDG_CACHE / "wal/colors.json", _pywal_json(t, ctx, wallpaper))
-    if have("pywalfox"):
-        run("pywalfox", "update")
+    if have("pywalfox"):  # fire and forget: it only relays to the add-on
+        subprocess.Popen(["pywalfox", "update"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=True)
     else:
         notes.append("pywalfox not installed (no live recolor)")
     return "; ".join(notes)
 
 
+GEN_EXT_ID = "local.plasma-themer"
+
+
+def _vscodium_ext_dir() -> Path:
+    native = HOME / ".vscode-oss/extensions"
+    flatpak = HOME / ".var/app/com.vscodium.codium/data/vscode/extensions"
+    return flatpak if not native.exists() and flatpak.exists() else native
+
+
+def _vscodium_generated_theme(ctx: dict) -> str:
+    """Build a color theme from the palette (template from Omarchy) as a local extension. Returns its label."""
+    import zlib
+    base = _vscodium_ext_dir()
+    theme = render("vscode-theme.json", {**ctx["c"], "theme_type": "dark"})
+    # VSCodium caches themes per extension version, so derive the version from the content (as Omarchy does).
+    version = f"1.0.{zlib.crc32(theme.encode())}"
+    ext = base / f"{GEN_EXT_ID}-{version}"
+    for old in base.glob(f"{GEN_EXT_ID}-*"):
+        if old != ext:
+            shutil.rmtree(old, ignore_errors=True)
+    write(ext / "themes/plasma-themer-color-theme.json", theme)
+    write(ext / "package.json", json.dumps({
+        "name": "plasma-themer", "displayName": "Plasma Themer", "publisher": "local", "version": version,
+        "description": "Generated from the active plasma-themer palette", "engines": {"vscode": "^1.70.0"},
+        "categories": ["Themes"],
+        "contributes": {"themes": [{"label": "Plasma Themer", "uiTheme": "vs-dark",
+                                    "path": "./themes/plasma-themer-color-theme.json", "_watch": True}]},
+    }, indent=2) + "\n")
+    # register it, or VSCodium ignores the folder
+    reg = base / "extensions.json"
+    entries = json.loads(reg.read_text()) if reg.exists() else []
+    entries = [e for e in entries if e.get("identifier", {}).get("id") != GEN_EXT_ID]
+    entries.append({"identifier": {"id": GEN_EXT_ID}, "version": version,
+                    "location": {"$mid": 1, "fsPath": str(ext), "external": f"file://{ext}", "path": str(ext),
+                                 "scheme": "file"},
+                    "relativeLocation": ext.name})
+    write(reg, json.dumps(entries))
+    return "Plasma Themer"
+
+
 @target("vscodium")
 def vscodium(t: Theme, ctx: dict, wallpaper: Path | None):
-    name = t.vscode.get("name")
-    if not name:
-        return "no vscode theme"
-    settings = XDG_CONFIG / "VSCodium/User/settings.json"
-    if not have("codium") and not settings.exists():
+    settings = app_config(XDG_CONFIG / "VSCodium", "com.vscodium.codium", "VSCodium") / "User/settings.json"
+    if not have("codium") and not settings.parent.parent.exists():
         return "skipped: VSCodium not installed"
+    name = t.vscode.get("name") or _vscodium_generated_theme(ctx)
     txt = settings.read_text() if settings.exists() else "{\n}\n"
     entry = f'"workbench.colorTheme": {json.dumps(name, ensure_ascii=False)}'
     if re.search(r'"workbench\.colorTheme"\s*:', txt):
@@ -418,14 +484,15 @@ def vscodium(t: Theme, ctx: dict, wallpaper: Path | None):
     write(settings, txt)
     ext = t.vscode.get("extension")
     # check the extensions dir instead of `codium --list-extensions` (that boots Electron: ~0.3s fast PC, seconds slow)
-    ext_dir = HOME / ".vscode-oss/extensions"
+    ext_dir = _vscodium_ext_dir()
     if ext and ext_dir.is_dir() and not any(d.name.lower().startswith(ext.lower() + "-") for d in ext_dir.iterdir()):
         return f"WARN: theme extension {ext} missing — run: themer setup"
+    return "" if t.vscode.get("name") else "generated from palette"
 
 
 @target("vesktop (discord)")
 def vesktop(t: Theme, ctx: dict, wallpaper: Path | None):
-    root = XDG_CONFIG / "vesktop"
+    root = app_config(XDG_CONFIG / "vesktop", "dev.vencord.Vesktop", "vesktop")
     if not root.is_dir() and not have("vesktop"):
         return "skipped: Vesktop not installed"
     (root / "settings").mkdir(parents=True, exist_ok=True)
@@ -463,8 +530,10 @@ def obsidian(t: Theme, ctx: dict, wallpaper: Path | None):
 
 @target("login screen")
 def login_screen(t: Theme, ctx: dict, wallpaper: Path | None):
-    # One-time root setup (install/system-setup.sh) makes /var/lib/plasma-themer user-owned and points
-    # /etc/plasmalogin.conf at login-background.jpg in it, so switching needs no sudo.
+    # One-time root setup (install/system-setup.sh) makes /var/lib/plasma-themer user-owned and points the login
+    # manager at files in it, so switching needs no sudo:
+    #   Plasma Login Manager: /etc/plasmalogin.conf -> login-background.jpg
+    #   SDDM (Breeze theme):  breeze/theme.conf.user -> sddm-breeze.conf (symlink), which we rewrite here
     root = Path("/var/lib/plasma-themer")
     if not (root.is_dir() and os.access(root, os.W_OK)):
         return "skipped: run install/system-setup.sh once"
@@ -480,3 +549,8 @@ def login_screen(t: Theme, ctx: dict, wallpaper: Path | None):
             im.convert("RGB").save(tmp, quality=90)
     os.chmod(tmp, 0o644)
     tmp.replace(root / "login-background.jpg")
+    if (root / "sddm-breeze.conf").exists():
+        write(root / "sddm-breeze.conf", f"# plasma-themer: {t.name}\n[General]\ntype=image\n"
+                                          f"background={root / 'login-background.jpg'}\ncolor={ctx['c']['accent']}\n")
+        os.chmod(root / "sddm-breeze.conf", 0o644)
+        return "sddm"

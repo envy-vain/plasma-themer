@@ -1,0 +1,33 @@
+# Cachy Night — rebuilt from the pre-themer desktop: the near-black of the old ASCII-art wallpaper,
+# the custom Plasma accent (146,110,228), its warm gold dots, and the Nord terminal palette nudged violet.
+mode = "dark"
+
+accent = "#926ee4"
+selection = "#2a2340"
+muted = "#5c5875"
+
+background = "#0b0b10"
+dark_background = "#09090d"
+darker_background = "#060609"
+lighter_background = "#15141c"
+
+foreground = "#d8d6e4"
+dark_foreground = "#8a879e"
+light_foreground = "#e4e2ee"
+bright_foreground = "#f2f0fa"
+
+red = "#d16d7e"
+yellow = "#d9b87c"
+orange = "#d99a6c"
+green = "#a3be8c"
+cyan = "#88c0d0"
+blue = "#8fa1e3"
+magenta = "#b48ef0"
+brown = "#6e5a45"
+
+bright_red = "#e8899a"
+bright_yellow = "#ecd09a"
+bright_green = "#bdd6a6"
+bright_cyan = "#a5d6e3"
+bright_blue = "#aab9f2"
+bright_magenta = "#c9a9ff"

@@ -9,6 +9,7 @@ git -C "$tmp/omarchy" sparse-checkout set themes >/dev/null
 for t in "$here"/themes/*/; do
   slug=$(basename "$t")
   [[ $slug == rose-pine ]] && continue   # upstream ships light Dawn wallpapers; we use generated dark ones
+  [[ $slug == cachy-night ]] && continue # ours, not an Omarchy theme
   src="$tmp/omarchy/themes/$slug/backgrounds"
   [[ -d $src ]] || continue
   mkdir -p "$t/backgrounds"
