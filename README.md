@@ -55,6 +55,10 @@ Built to stay light:
 - **Nothing re-applies needlessly.** The color scheme and icon theme are skipped when unchanged (both make every
   app repaint), files are only rewritten when their content changes, Konsole is driven over in-process D-Bus,
   and the slow Electron CLI of VSCodium is never started during a switch.
+- **Instant picker.** A small user service (`plasma-themer-picker.service`, ~50 MB) keeps the picker loaded but
+  hidden; the hotkey drops a file that it notices through inotify (no polling) and it appears in ~150 ms. Without
+  the service the hotkey runs a tiny shell launcher straight into Qt with pre-built data (~0.65 s, no Python).
+  Turn it off with `systemctl --user disable --now plasma-themer-picker`.
 - **Lite mode** (auto-on with no GPU, ≤2 CPU cores or <4 GB RAM) drops picker animations and translucency and
   makes Konsole opaque without blur. Force it with `themer lite on`.
 

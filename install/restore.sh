@@ -26,6 +26,8 @@ fi
 tar --zstd -xf "$file"
 
 # things themer creates outside the backed-up paths
+systemctl --user disable --now plasma-themer-picker.service >/dev/null 2>&1 || true
+rm -f "$HOME/.config/systemd/user/plasma-themer-picker.service"
 rm -f "$HOME"/.local/share/applications/themer-*.desktop
 rm -rf "$HOME"/.local/share/icons/Themer-Papirus-*
 rm -rf "$HOME"/.local/share/plasma-themer/current

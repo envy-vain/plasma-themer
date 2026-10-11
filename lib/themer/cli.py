@@ -74,6 +74,11 @@ def apply(slug: str, only: set[str] | None = None, quiet: bool = False) -> int:
         print(f"  {mark} {name:<26}{_c('2', str(note))}")
 
     state_set("current", slug)
+    try:  # keep the hotkey's prepared picker data current
+        from .picker import write_data
+        write_data()
+    except Exception:  # noqa: BLE001
+        log(traceback.format_exc())
     total = time.monotonic() - started
     if not quiet:
         print(_c("2", f"  done in {total:.1f}s" + (f" — {failed} problem(s), see {core.LOG}" if failed else "")))
@@ -114,6 +119,8 @@ def cmd_bg(a):
             fn(t, ctx, wp)
         except Exception:
             log(traceback.format_exc())
+    from .picker import write_data
+    write_data()
     print(wp.name)
 
 
@@ -124,6 +131,13 @@ def cmd_lite(a):
     print(f"lite mode: {state_get('lite', 'auto')} -> {'ON' if core.lite() else 'off'}")
     if a.mode and state_get("current"):
         return apply(state_get("current"), {"konsole"})  # the only target whose output depends on it
+
+
+def cmd_pick_apply(a):
+    """Called by the fast hotkey launcher once a theme was chosen in the picker."""
+    if a.bg:
+        state_set(f"bg/{a.theme}", a.bg)
+    return apply(a.theme, quiet=True)
 
 
 def cmd_pick(a):
@@ -155,6 +169,9 @@ def main(argv=None):
     b = sub.add_parser("bg", help="wallpaper within current theme")
     b.add_argument("which", nargs="?", default="next", choices=["next", "prev", "current"])
     sub.add_parser("pick", help="open the overlay picker")
+    pa = sub.add_parser("pick-apply")  # internal: used by the hotkey launcher
+    pa.add_argument("theme", choices=list_themes())
+    pa.add_argument("bg", nargs="?", default="")
     sub.add_parser("setup", help="one-time setup (extensions, pywalfox, shortcuts)")
     sub.add_parser("doctor", help="check what is installed / wired up")
     sub.add_parser("targets", help="list integrations")
@@ -171,6 +188,7 @@ def main(argv=None):
         case "reapply": return apply(state_get("current") or list_themes()[0])
         case "bg": return cmd_bg(a)
         case "pick": return cmd_pick(a)
+        case "pick-apply": return cmd_pick_apply(a)
         case "setup": return cmd_setup(a)
         case "doctor": return cmd_doctor(a)
         case "targets": print("\n".join(n for n, _ in TARGETS))

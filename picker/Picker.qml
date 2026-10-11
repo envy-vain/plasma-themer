@@ -6,11 +6,16 @@
 // translucency.
 import QtQuick
 import QtQuick.Window
+import Qt.labs.folderlistmodel
 
 Window {
     id: win
-    visible: true
-    visibility: Window.FullScreen
+    // --resident: stay loaded but hidden and show when the hotkey drops a file into trigger/ (see picker.py).
+    // Opening is then ~instant instead of a cold Qt start.
+    readonly property bool resident: Qt.application.arguments.indexOf("--resident") >= 0
+    readonly property string dataPath: Qt.application.arguments[Qt.application.arguments.length - 1]
+    visible: !resident
+    visibility: resident ? Window.Hidden : Window.FullScreen
     flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
     color: lite ? (col.darker_background || "#000") : "transparent"
     title: "Themer"
@@ -26,19 +31,42 @@ Window {
     function wp(t, i) { return t && t.wallpapers.length ? t.wallpapers[bgSel[i] ?? t.bg] : null }
     function ms(n) { return lite ? 0 : n }
 
-    Component.onCompleted: {
-        const args = Qt.application.arguments
-        const path = args[args.length - 1]
+    property string lastData: ""
+    function loadData() {
         const xhr = new XMLHttpRequest()
-        xhr.open("GET", "file://" + path, false)
+        xhr.open("GET", "file://" + dataPath, false)
         xhr.send()
         const data = JSON.parse(xhr.responseText)
         lite = !!data.lite
         bgSel = data.themes.map(t => t.bg)
-        themes = data.themes
+        // Only replace the model when the data really changed: re-assigning it rebuilds every card and
+        // backdrop (and re-uploads their textures), which made the resident picker fade in half-drawn.
+        const themesJson = JSON.stringify(data.themes)
+        if (themesJson !== lastData) { lastData = themesJson; themes = data.themes }
         idx = Math.max(0, themes.findIndex(t => t.slug === data.current))
         list.positionViewAtIndex(idx, PathView.Center)
+    }
+    function showPicker() {
+        loadData()  // re-read: theme/wallpaper may have changed since the last open
+        applying = false
+        root.opacity = 0
+        win.visibility = Window.FullScreen
+        win.requestActivate()
+        root.forceActiveFocus()
         root.opacity = 1
+    }
+
+    Component.onCompleted: {
+        loadData()
+        if (!resident) root.opacity = 1
+    }
+
+    FolderListModel {
+        // inotify-backed (no polling): a new show.* file means "open"; the wrapper clears them on HIDDEN
+        folder: resident ? "file://" + dataPath.substring(0, dataPath.lastIndexOf("/")) + "/trigger" : ""
+        nameFilters: ["show.*"]
+        showDirs: false
+        onCountChanged: if (resident && count > 0 && !win.visible) showPicker()
     }
 
     function move(d) { if (!applying) idx = (idx + d + themes.length) % themes.length }
@@ -57,14 +85,21 @@ Window {
     function close() { root.opacity = 0; closeTimer.start() }
 
     Timer { id: quitTimer; interval: lite ? 900 : 1700; onTriggered: win.close() }
-    Timer { id: closeTimer; interval: ms(220) + 1; onTriggered: Qt.quit() }
+    Timer {
+        id: closeTimer; interval: ms(120) + 1
+        onTriggered: {
+            if (!resident) { Qt.quit(); return }
+            win.visible = false
+            console.log("HIDDEN")  // wrapper clears trigger/ so the next hotkey press counts as a change
+        }
+    }
 
     Item {
         id: root
         anchors.fill: parent
         opacity: 0
         focus: true
-        Behavior on opacity { NumberAnimation { duration: ms(220); easing.type: Easing.OutCubic } }
+        Behavior on opacity { NumberAnimation { duration: ms(120); easing.type: Easing.OutCubic } }
 
         Keys.onPressed: (e) => {
             switch (e.key) {
@@ -88,7 +123,9 @@ Window {
                 required property var modelData
                 required property int index
                 anchors.fill: parent
-                source: wp(modelData, index) ? "file://" + wp(modelData, index).blur : ""
+                // only the focused backdrop (and the one still fading out) is loaded: 1 image at startup, not 12
+                readonly property bool live: index === idx || opacity > 0
+                source: live && wp(modelData, index) ? "file://" + wp(modelData, index).blur : ""
                 sourceSize: Qt.size(320, 180)
                 fillMode: Image.PreserveAspectCrop
                 smooth: true
@@ -175,6 +212,7 @@ Window {
                         source: wp(card.modelData, card.index) ? "file://" + wp(card.modelData, card.index).card : ""
                         sourceSize: Qt.size(460, 300)
                         fillMode: Image.PreserveAspectCrop
+                        asynchronous: true  // decode off the UI thread: the window appears before the PNGs
                         cache: false
                     }
                     // fake terminal snippet in the theme's colors

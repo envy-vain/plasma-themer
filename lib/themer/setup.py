@@ -30,13 +30,22 @@ def _bin() -> str:
 
 
 def shortcuts() -> list[str]:
+    from .picker import SERVICE, write_data, write_launcher, write_resident
+    from .core import lite
+    write_data()
+    fast = write_launcher(_bin())
+    if not lite() and write_resident(_bin()):  # weak PCs: skip the ~50 MB resident picker
+        run("systemctl", "--user", "daemon-reload")
+        run("systemctl", "--user", "enable", "--now", SERVICE.name)
+        run("systemctl", "--user", "restart", SERVICE.name)  # pick up a new Picker.qml
     apps = XDG_DATA / "applications"
     apps.mkdir(parents=True, exist_ok=True)
     out = []
     for did, name, cmd, key in SHORTCUTS:
+        exe = str(fast) if (fast and cmd == "themer pick") else f"{_bin()} {cmd.split(' ', 1)[1]}"
         (apps / did).write_text(
             "[Desktop Entry]\nType=Application\n"
-            f"Name=Themer: {name}\nExec={_bin()} {cmd.split(' ', 1)[1]}\n"
+            f"Name=Themer: {name}\nExec={exe}\n"
             "Icon=preferences-desktop-color\nNoDisplay=true\nX-KDE-GlobalAccel-CommandShortcut=true\n")
         ident = f"['{did}', '_launch', '{name}', '{name}']"
         run("gdbus", "call", "--session", "--dest", "org.kde.kglobalaccel", "--object-path", "/kglobalaccel",
