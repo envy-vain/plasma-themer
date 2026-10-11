@@ -77,6 +77,16 @@ def pywalfox() -> list[str]:
     return ["native host installed — now add the add-on: https://addons.mozilla.org/firefox/addon/pywalfox/"]
 
 
+def launcher_icon() -> list[str]:
+    """The launcher badge is (re)applied by the icons target on every switch; run it once now."""
+    cur = state_get("current")
+    if not cur:
+        return ["no theme applied yet"]
+    from .cli import apply
+    apply(cur, {"icons"}, quiet=True)
+    return ["launcher set to the black KDE badge"]
+
+
 def prebake() -> list[str]:
     from .picker import warm
     return [f"{warm()} wallpaper(s) scaled + picker art baked"]
@@ -84,7 +94,7 @@ def prebake() -> list[str]:
 
 def setup() -> int:
     for title, fn in (("Shortcuts", shortcuts), ("VSCodium", vscodium_extensions), ("Pywalfox", pywalfox),
-                      ("Wallpaper cache", prebake)):
+                      ("Wallpaper cache", prebake), ("Launcher icon", launcher_icon)):
         print(f"\033[1m{title}\033[0m")
         for line in fn():
             print("  " + line)

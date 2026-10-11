@@ -84,7 +84,7 @@ def cursor(t: Theme, ctx: dict, wallpaper: Path | None):
     return want
 
 
-ICON_OVERLAY_VERSION = 6
+ICON_OVERLAY_VERSION = 8
 
 
 def _tint_folder(svg: str, tint: str) -> str:
@@ -128,6 +128,7 @@ def icons(t: Theme, ctx: dict, wallpaper: Path | None):
         return f"{color} (unchanged)"  # an icon-theme switch flushes every app's icon cache: skip when we can
     if (root / "index.theme").exists():  # built before for this color: just switch (overlays are tiny)
         _apply_icon_theme(name)
+        _set_launcher_icon(_launcher_name(tint if pastel else mix(ctx["c"]["accent"], "#ffffff", 0.3)))
         return f"{color} (cached)"
     shutil.rmtree(root, ignore_errors=True)
     dirs = []
@@ -163,6 +164,19 @@ def icons(t: Theme, ctx: dict, wallpaper: Path | None):
             dirs.append(size_dir.name)
     sections = "".join(
         f"\n[{d}/places]\nSize={d.split('x')[0]}\nContext=Places\nType=Fixed\n" for d in dirs)
+    # Launcher icon: Papirus' KDE logo as a black badge with the logo in the pastel tint ("themer-start";
+    # a unique name so nothing else resolves to it, and not *-symbolic so Plasma doesn't flatten its colors).
+    kde = Path("/usr/share/icons/Papirus/48x48/apps/kde.svg")
+    if kde.exists():
+        logo = tint if pastel else mix(ctx["c"]["accent"], "#ffffff", 0.3)
+        svg = kde.resolve().read_text().replace("fill:#2c9bff", "fill:#313135")
+        svg = svg.replace('<path style="fill:#ffffff"', f'<path style="fill:{logo}"')
+        (root / "scalable/apps").mkdir(parents=True, exist_ok=True)
+        (root / f"scalable/apps/{_launcher_name(logo)}.svg").write_text(svg)
+        dirs_extra = "scalable/apps"
+        sections += "\n[scalable/apps]\nSize=48\nMinSize=8\nMaxSize=512\nType=Scalable\nContext=Applications\n"
+    else:
+        dirs_extra = ""
     # Everything except folders comes from Breeze Dark: flat, monochrome and FollowsColorScheme, so tray/popup
     # icons take the theme's text color (Papirus' colorful status icons looked out of place). Papirus-Dark is
     # only a fallback for app icons Breeze lacks. Header copied from breeze-dark so Plasma treats it the same.
@@ -175,12 +189,43 @@ def icons(t: Theme, ctx: dict, wallpaper: Path | None):
     write(root / "index.theme",
           f"[Icon Theme]\nName={name}\nComment=plasma-themer: Breeze Dark + black pastel folders\n"
           f"Inherits=breeze-dark,Papirus-Dark,hicolor\n" + "\n".join(header) + "\n"
-          f"Directories={','.join(d + '/places' for d in dirs)}\n" + sections)
+          f"Directories={','.join([d + '/places' for d in dirs] + ([dirs_extra] if dirs_extra else []))}\n"
+          + sections)
     _apply_icon_theme(name)
+    _set_launcher_icon(_launcher_name(tint if pastel else mix(ctx["c"]["accent"], "#ffffff", 0.3)))
     for old in (XDG_DATA / "icons").glob("Themer-Papirus-*"):
         if not old.name.endswith(f"-{ICON_OVERLAY_VERSION}"):  # only drop overlays from older versions
             shutil.rmtree(old, ignore_errors=True)
     return color
+
+
+def _launcher_name(logo: str) -> str:
+    # color in the name: Plasma caches icons by name, so a fixed name kept the previous theme's logo color
+    return f"themer-start-{logo.lstrip('#')}"
+
+
+LAUNCHER_JS = """
+var ps = panels();
+for (var i = 0; i < ps.length; i++) {
+  var ws = ps[i].widgets();
+  for (var j = 0; j < ws.length; j++) {
+    var t = ws[j].type;
+    if (t != "org.kde.plasma.kickoff" && t != "org.kde.plasma.kicker" && t != "org.kde.plasma.kickerdash") continue;
+    ws[j].currentConfigGroup = ["General"];
+    var cur = String(ws[j].readConfig("icon", ""));
+    // only replace the stock KDE logo or our own badge, never an icon the user picked
+    if (cur == "" || cur.indexOf("themer-start") == 0 || cur.indexOf("start-here-kde") == 0 || cur == "kde-symbolic" || cur == "kde") {
+      ws[j].writeConfig("icon", "%s");
+      ws[j].reloadConfig();
+    }
+  }
+}
+"""
+
+
+def _set_launcher_icon(icon: str) -> None:
+    run("gdbus", "call", "--session", "--dest", "org.kde.plasmashell", "--object-path", "/PlasmaShell",
+        "--method", "org.kde.PlasmaShell.evaluateScript", LAUNCHER_JS % icon)
 
 
 def _apply_icon_theme(name: str) -> None:
