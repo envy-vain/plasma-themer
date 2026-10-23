@@ -7,12 +7,16 @@ It also themes an **LXQt + labwc** Wayland session next to Plasma, with the same
 lightweight session that feels like Plasma (shortcuts, gestures, OSD, tray popups), see
 [labwc-plasma-session](https://github.com/envy-vain/labwc-plasma-session).
 
+![The theme picker on Tokyo Night](screenshots/picker-tokyo-night.png)
+
 Themes: **Tokyo Night · Matte Black · Catppuccin Mocha · Rosé Pine · Gruvbox · Everforest · Nord · Kanagawa ·
 Cachy Night · Ethereal · Last Horizon · Vantablack**
 
 Palettes and most wallpapers come from [Omarchy](https://github.com/basecamp/omarchy) (MIT), as does the template
 for the generated VSCodium theme. Rosé Pine uses the dark "main" palette. **Cachy Night** is original: near-black,
 violet accent, warm gold, Nord-ish terminal colors. Most themes also ship generated wallpapers (`gen-*`); `tools/genwall.py` makes more for any theme.
+
+![The theme picker on Vantablack](screenshots/picker-vantablack.png)
 
 ## Install
 
