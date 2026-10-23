@@ -97,3 +97,7 @@ optional `vscode.json` and `backgrounds/`. Personal themes can live in `~/.confi
 - `konsave -a pre-plasma-themer` restores the KDE look.
 - btrfs: snapper snapshot "pre plasma-themer" for `/`, read-only snapshot in `/home/.snapshots-themer/`.
 - Login screen: `sudo cp /etc/plasmalogin.conf.pre-themer /etc/plasmalogin.conf`.
+
+## About
+
+I wrote the base of this project (the code that does the theming); the front end (the picker UI) was designed by Claude.
