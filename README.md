@@ -12,7 +12,7 @@ Cachy Night · Ethereal · Last Horizon · Vantablack**
 
 Palettes and most wallpapers come from [Omarchy](https://github.com/basecamp/omarchy) (MIT), as does the template
 for the generated VSCodium theme. Rosé Pine uses the dark "main" palette. **Cachy Night** is original: near-black,
-violet accent, warm gold, Nord-ish terminal colors. Every theme also gets generated wallpapers (`gen-*`).
+violet accent, warm gold, Nord-ish terminal colors. Most themes also ship generated wallpapers (`gen-*`); `tools/genwall.py` makes more for any theme.
 
 ## Install
 
@@ -101,7 +101,8 @@ optional `vscode.json` and `backgrounds/`. Personal themes can live in `~/.confi
   (`~/.local/share/plasma-themer/backups/`) and removes hotkeys + icon overlay.
 - `konsave -a pre-plasma-themer` restores the KDE look.
 - btrfs: snapper snapshot "pre plasma-themer" for `/`, read-only snapshot in `/home/.snapshots-themer/`.
-- Login screen: `sudo cp /etc/plasmalogin.conf.pre-themer /etc/plasmalogin.conf`.
+- Login screen: `sudo cp /etc/plasmalogin.conf.pre-themer /etc/plasmalogin.conf` (Plasma Login Manager), or
+  `sudo rm /usr/share/sddm/themes/breeze/theme.conf.user` (SDDM; `restore.sh` prints the exact commands).
 
 ## About
 

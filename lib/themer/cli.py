@@ -13,7 +13,8 @@ from . import core
 from .core import CURRENT, Theme, have, list_themes, load_theme, log, run, state_get, state_set
 from .targets import TARGETS
 
-SEQUENTIAL = {"plasma colors + accent", "icons (Papirus folders)", "lxqt + labwc"}  # kdeglobals: keep ordered
+# kdeglobals / konsolerc are written by more than one of these: keep them ordered
+SEQUENTIAL = {"plasma colors + accent", "icons (Papirus folders)", "konsole", "lxqt + labwc"}
 TTY = sys.stdout.isatty()
 
 
@@ -118,7 +119,10 @@ def cmd_bg(a):
             fn(t, ctx, wp)
         except Exception:
             log(traceback.format_exc())
-    lxqt_wallpaper(wp)
+    try:
+        lxqt_wallpaper(wp)
+    except Exception:
+        log(traceback.format_exc())
     from .picker import write_data
     write_data()
     print(wp.name)

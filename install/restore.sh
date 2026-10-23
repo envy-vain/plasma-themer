@@ -31,6 +31,17 @@ rm -f "$HOME/.config/systemd/user/plasma-themer-picker.service"
 rm -f "$HOME"/.local/share/applications/themer-*.desktop
 rm -rf "$HOME"/.local/share/icons/Themer-Papirus-*
 rm -rf "$HOME"/.local/share/plasma-themer/current
+# LXQt + labwc target: only what it created (these files also hold the user's own settings, so they aren't in
+# the backup: restoring them would wipe everything changed since install)
+rm -rf "$HOME"/.local/share/lxqt/themes/ThemerA "$HOME"/.local/share/lxqt/themes/ThemerB
+grep -qs plasma-themer "$HOME/.config/labwc/themerc-override" && rm -f "$HOME/.config/labwc/themerc-override"
+[[ -f $HOME/.config/lxqt/lxqt.conf ]] && sed -i '/^theme=Themer[AB]$/d' "$HOME/.config/lxqt/lxqt.conf"
+for app in konsole dolphin kate kwrite okular gwenview ark filelight partitionmanager; do
+  scheme=$(kreadconfig6 --file "${app}rc" --group UiSettings --key ColorScheme 2>/dev/null || true)
+  if [[ $scheme == Themer* ]]; then
+    kwriteconfig6 --file "${app}rc" --group UiSettings --key ColorScheme --delete 2>/dev/null || true
+  fi
+done
 for c in themer-picker.desktop themer-bg-next.desktop themer-next.desktop; do
   gdbus call --session --dest org.kde.kglobalaccel --object-path /kglobalaccel \
     --method org.kde.KGlobalAccel.unregister "$c" "_launch" >/dev/null 2>&1 || true

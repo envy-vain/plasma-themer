@@ -23,10 +23,6 @@ paths=(
   .config/konsolerc .config/breezerc .config/Trolltech.conf
   .local/share/color-schemes .local/share/konsole .local/share/plasma
   .local/share/icons .local/share/wallpapers .local/share/kxmlgui5
-  # LXQt + labwc session (and the KDE apps whose scheme is set per app there)
-  .config/lxqt/lxqt.conf .config/lxqt/session.conf .config/labwc/themerc-override .local/share/lxqt/themes
-  .config/dolphinrc .config/katerc .config/kwriterc .config/okularrc .config/gwenviewrc .config/arkrc
-  .config/filelightrc .config/partitionmanagerrc
   # GTK
   .config/gtk-3.0 .config/gtk-4.0 .gtkrc-2.0 .config/xsettingsd
   # Terminals + CLI

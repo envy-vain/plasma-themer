@@ -675,12 +675,14 @@ def _ini_set(path: Path, values: dict[str, dict[str, str]]) -> None:
 
 
 def _in_labwc() -> bool:
-    return bool(os.environ.get("LABWC_PID")) or run("pgrep", "-u", str(os.getuid()), "-x", "labwc").returncode == 0
+    # not $LABWC_PID: it can linger in the systemd user environment into a later Plasma login
+    return run("pgrep", "-u", str(os.getuid()), "-x", "labwc").returncode == 0
 
 
 def lxqt_wallpaper(wallpaper: Path) -> None:
     """swaybg reads the `current/wallpaper` link at login; restart it live when labwc is running."""
     link = CURRENT / "wallpaper"
+    link.parent.mkdir(parents=True, exist_ok=True)
     tmp = link.with_name("wallpaper.tmp")
     tmp.unlink(missing_ok=True)
     tmp.symlink_to(screen_wallpaper(wallpaper))
@@ -739,7 +741,8 @@ def lxqt(t: Theme, ctx: dict, wallpaper: Path | None):
         cursor_theme = "breeze_cursors"
     _ini_set(LXQT / "session.conf", {"Mouse": {"cursor_theme": cursor_theme, "cursor_size": "24"}})
 
-    write(LABWC / "themerc-override", render("lxqt/labwc-themerc", ctx))
+    if _marker_ok(LABWC / "themerc-override"):  # leave a hand-written override alone
+        write(LABWC / "themerc-override", render("lxqt/labwc-themerc", ctx))
     if wallpaper:
         lxqt_wallpaper(wallpaper)
     if _in_labwc():
