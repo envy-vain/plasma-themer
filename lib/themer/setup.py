@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import sys
 from pathlib import Path
 
 from .core import HOME, REPO, kwrite, qml_runtime, XDG_CONFIG, XDG_DATA, have, list_themes, load_theme, run, state_get
@@ -125,7 +126,9 @@ def doctor() -> int:
         ("login screen", os.access("/var/lib/plasma-themer", os.W_OK)),
         ("shortcuts", (XDG_DATA / "applications/themer-picker.desktop").exists()),
     ]
+    tty = sys.stdout.isatty()
     for name, ok in checks:
-        print(f"  {'\033[32m✓' if ok else '\033[33m–'}\033[0m {name}")
+        mark, code = ("✓", 32) if ok else ("–", 33)
+        print(f"  \033[{code}m{mark}\033[0m {name}" if tty else f"  {mark} {name}")
     print(f"  current theme: {state_get('current', 'none')}")
     return 0

@@ -1,0 +1,213 @@
+/* plasma-themer: {{ name }} — generated, edits are overwritten on the next theme switch */
+{%- set panel_a = 1.0 if lite else 0.88 %}
+
+LXQtPanel #BackgroundWidget {
+    background: rgba({{ c.background | rgb }}, {{ panel_a }});
+    border-top: 1px solid {{ c.border }};
+}
+
+QToolTip {
+    background: {{ c.surface }};
+    color: {{ c.foreground }};
+    border: 1px solid {{ c.border }};
+    border-radius: 6px;
+    padding: 4px 6px;
+}
+
+Plugin, LXQtPanelPlugin {
+    padding: 0;
+    spacing: 4px;
+    qproperty-moveMarkerColor: {{ c.accent }};
+}
+
+Plugin > QWidget, Plugin > QWidget > QWidget { color: {{ c.foreground }}; }
+
+Plugin > QToolButton,
+Plugin > QWidget > QToolButton,
+Plugin > QWidget > QToolButton > QWidget > QToolButton,
+LXQtPanelPlugin > QToolButton {
+    margin: 3px 1px;
+    padding: 2px 4px;
+    border: none;
+    border-radius: 7px;
+    color: {{ c.foreground }};
+}
+
+Plugin > QToolButton:hover,
+Plugin > QWidget > QToolButton:hover,
+LXQtPanelPlugin > QToolButton:hover { background: {{ c.surface2 }}; }
+
+Plugin > QToolButton:pressed,
+LXQtPanelPlugin > QToolButton:pressed { background: {{ c.border }}; }
+
+/* ---------------------------------------------------------------- menus */
+
+QMenu {
+    background: {{ c.dark_background }};
+    color: {{ c.foreground }};
+    border: 1px solid {{ c.border }};
+    border-radius: 8px;
+    padding: 5px;
+}
+QMenu::item { padding: 5px 22px 5px 10px; border-radius: 5px; color: {{ c.foreground }}; }
+QMenu::item:selected { background: {{ c.accent }}; color: {{ c.accent_foreground }}; }
+QMenu::item:disabled { color: {{ c.muted }}; }
+QMenu::separator { height: 1px; background: {{ c.border }}; margin: 4px 6px; }
+QMenu::icon { padding-left: 6px; }
+QMenu QToolButton { background: transparent; border: none; padding: 1px; color: {{ c.foreground }}; font: bold; }
+
+/* ---------------------------------------------------------------- app menu */
+
+#MainMenu, #FancyMenu {
+    margin: 3px 4px;
+    padding: 2px 8px;
+    border-radius: 7px;
+    background: {{ c.surface2 }};
+}
+#MainMenu:hover, #FancyMenu:hover { background: {{ c.accent }}; }
+
+LXQtFancyMenuWindow {
+    background: {{ c.dark_background }};
+    border: 1px solid {{ c.border }};
+    border-radius: 12px;
+}
+#FancyMenu QLineEdit, #MainMenu QLineEdit {
+    background: {{ c.surface }};
+    color: {{ c.foreground }};
+    border: 1px solid {{ c.border }};
+    border-radius: 8px;
+    padding: 6px 10px;
+    margin: 6px;
+    selection-background-color: {{ c.accent }};
+    selection-color: {{ c.accent_foreground }};
+}
+#FancyMenu QLineEdit:focus, #MainMenu QLineEdit:focus { border: 1px solid {{ c.accent }}; }
+
+#FancyMenu #AppView, #FancyMenu QListView, #MainMenu ActionView {
+    background: transparent;
+    border: none;
+    color: {{ c.foreground }};
+    outline: none;
+}
+#FancyMenu QListView::item, #MainMenu ActionView::item { padding: 5px; border-radius: 6px; color: {{ c.foreground }}; }
+#FancyMenu QListView::item:hover, #MainMenu ActionView::item:hover { background: {{ c.surface2 }}; }
+#FancyMenu QListView::item:selected, #MainMenu ActionView::item:selected {
+    background: {{ c.accent }};
+    color: {{ c.accent_foreground }};
+}
+#FancyMenu QToolButton { background: transparent; border: none; border-radius: 6px; padding: 5px; color: {{ c.foreground }}; }
+#FancyMenu QToolButton:hover, #FancyMenu QToolButton:focus { background: {{ c.surface2 }}; }
+#FancyMenu QToolButton:pressed { background: {{ c.accent }}; color: {{ c.accent_foreground }}; }
+
+#FancyMenu QScrollBar:vertical { width: 6px; background: transparent; margin: 2px; }
+#FancyMenu QScrollBar:horizontal { height: 6px; background: transparent; margin: 2px; }
+#FancyMenu QScrollBar::handle { background: {{ c.border }}; border-radius: 3px; min-height: 24px; }
+#FancyMenu QScrollBar::handle:hover { background: {{ c.muted }}; }
+#FancyMenu QScrollBar::add-line, #FancyMenu QScrollBar::sub-line { width: 0; height: 0; }
+#FancyMenu QAbstractScrollArea::corner { background: transparent; }
+
+/* ---------------------------------------------------------------- task bar */
+
+#TaskBar QToolButton {
+    margin: 4px 2px;
+    padding: 0 8px;
+    border: none;
+    /* every open window gets an underline, so it never looks like a quicklaunch icon */
+    border-bottom: 3px solid {{ c.muted }};
+    border-radius: 7px;
+    color: {{ c.dark_foreground }};
+    background: transparent;
+}
+#TaskBar QToolButton:hover { background: {{ c.surface }}; color: {{ c.foreground }}; }
+#TaskBar QToolButton:on {
+    background: {{ c.surface2 }};
+    border-bottom: 3px solid {{ c.bright_foreground }};
+    color: {{ c.bright_foreground }};
+}
+#TaskBar QToolButton[urgent="true"] { border-bottom: 2px solid {{ c.red }}; color: {{ c.red }}; }
+#TaskBar LXQtGroupPopup {
+    background: {{ c.dark_background }};
+    border: 1px solid {{ c.border }};
+    border-radius: 8px;
+}
+#TaskBar LXQtGroupPopup QToolButton { margin: 2px; }
+
+#QuickLaunch QToolButton { margin: 4px 1px; padding: 0 4px; border-radius: 7px; }
+#QuickLaunch QToolButton:hover { background: {{ c.surface2 }}; }
+#QuickLaunchPlaceHolder { color: {{ c.muted }}; }
+
+/* ---------------------------------------------------------------- desktops */
+
+#DesktopSwitch QToolButton {
+    margin: 9px 2px;
+    padding: 0;
+    min-width: 10px;
+    max-width: 10px;
+    border-radius: 5px;
+    background: {{ c.border }};
+    color: transparent;
+}
+#DesktopSwitch QToolButton:hover { background: {{ c.muted }}; }
+#DesktopSwitch QToolButton:on { background: {{ c.accent }}; min-width: 26px; max-width: 26px; }
+#DesktopSwitch QToolButton[urgent="true"] { background: {{ c.red }}; }
+
+/* ---------------------------------------------------------------- tray + status */
+
+#WorldClock { margin: 3px 2px; padding: 0 8px; border-radius: 7px; }
+#WorldClock:hover { background: {{ c.surface2 }}; }
+#WorldClock QLabel { color: {{ c.bright_foreground }}; font-weight: 600; qproperty-alignment: AlignCenter; }
+
+#VolumePlugin QToolButton, #LXQtMountPlugin QToolButton, #ShowDesktop, #Backlight, #DirectoryMenu {
+    margin: 3px 1px; padding: 0 4px; border: none; border-radius: 7px;
+}
+#VolumePlugin QToolButton:hover, #LXQtMountPlugin QToolButton:hover, #ShowDesktop:hover, #Backlight:hover,
+#DirectoryMenu:hover { background: {{ c.surface2 }}; }
+
+#Tray, TrayIcon { margin: 0 2px; }
+
+/* the ultra-low-power toggle (customcommand plugin) */
+#CustomButton, LXQtCustomCommand QToolButton {
+    margin: 4px 2px;
+    padding: 0 8px;
+    border-radius: 7px;
+    color: {{ c.foreground }};
+    font-weight: 600;
+}
+#CustomButton:hover { background: {{ c.surface2 }}; }
+
+VolumePopup, #LXQtMountPopup {
+    background: {{ c.dark_background }};
+    border: 1px solid {{ c.border }};
+    border-radius: 10px;
+}
+VolumePopup QPushButton, #LXQtMountPopup #EjectButton, #LXQtMountPopup #DiskButton {
+    background: transparent; border: none; border-radius: 6px; padding: 4px; color: {{ c.foreground }};
+}
+VolumePopup QPushButton:hover, VolumePopup QPushButton:on,
+#LXQtMountPopup #EjectButton:hover, #LXQtMountPopup #DiskButton:hover { background: {{ c.surface2 }}; }
+VolumePopup QSlider::groove:vertical { width: 6px; border-radius: 3px; background: {{ c.border }}; }
+VolumePopup QSlider::add-page:vertical { width: 6px; border-radius: 3px; background: {{ c.accent }}; }
+VolumePopup QSlider::sub-page:vertical { width: 6px; border-radius: 3px; background: {{ c.border }}; }
+VolumePopup QSlider::handle:vertical {
+    height: 14px; margin: 0 -4px; border-radius: 7px; background: {{ c.bright_foreground }};
+}
+#LXQtMountPopup #NoDiskLabel { color: {{ c.muted }}; padding: 8px; }
+
+#KbIndicator > QLabel { color: {{ c.foreground }}; padding: 0 4px; }
+
+/* ---------------------------------------------------------------- calendar popup */
+
+QCalendarWidget QWidget { background: {{ c.dark_background }}; color: {{ c.foreground }}; alternate-background-color: {{ c.surface }}; }
+QCalendarWidget #qt_calendar_navigationbar, QCalendarWidget #qt_calendar_navigationbar * { background: {{ c.dark_background }}; }
+QCalendarWidget QToolButton { color: {{ c.foreground }}; border: none; border-radius: 6px; padding: 4px 8px; font-weight: 600; }
+QCalendarWidget QToolButton:hover { background: {{ c.surface2 }}; }
+QCalendarWidget QToolButton::menu-indicator { image: none; }
+QCalendarWidget QSpinBox { background: {{ c.surface }}; color: {{ c.foreground }}; border: none; }
+QCalendarWidget QTableView {
+    background: {{ c.dark_background }};
+    selection-background-color: {{ c.accent }};
+    selection-color: {{ c.accent_foreground }};
+    outline: none;
+}
+
+#Spacer { background: transparent; }

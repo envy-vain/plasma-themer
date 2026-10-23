@@ -1,0 +1,36 @@
+/* plasma-themer: {{ name }} — generated */
+#panel {
+    background: {{ c.dark_background }};
+    border: 1px solid {{ c.border }};
+    border-radius: 12px;
+}
+QToolButton { margin: 4px; padding: 4px; border: none; border-radius: 6px; color: {{ c.foreground }}; }
+QToolButton:hover { background: {{ c.surface2 }}; }
+QToolButton::menu-indicator { image: none; }
+
+#commandEd {
+    background: {{ c.surface }};
+    color: {{ c.bright_foreground }};
+    border: 1px solid {{ c.border }};
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 12pt;
+    selection-background-color: {{ c.accent }};
+    selection-color: {{ c.accent_foreground }};
+}
+#commandEd:focus { border: 1px solid {{ c.accent }}; }
+
+#commandList {
+    background: transparent;
+    border: none;
+    color: {{ c.foreground }};
+    outline: none;
+}
+#commandList::item { padding: 4px; border-radius: 6px; color: {{ c.foreground }}; background: transparent; }
+#commandList::item:hover { background: {{ c.surface }}; }
+#commandList::item:selected { background: {{ c.accent }}; color: {{ c.accent_foreground }}; }
+
+QMenu { background: {{ c.dark_background }}; color: {{ c.foreground }}; border: 1px solid {{ c.border }}; border-radius: 8px; padding: 4px; }
+QMenu::item { padding: 5px 18px 5px 10px; border-radius: 5px; }
+QMenu::item:selected { background: {{ c.accent }}; color: {{ c.accent_foreground }}; }
+QMenu::item:disabled { color: {{ c.muted }}; }

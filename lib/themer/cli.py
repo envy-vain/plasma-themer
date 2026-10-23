@@ -13,7 +13,7 @@ from . import core
 from .core import CURRENT, Theme, have, list_themes, load_theme, log, run, state_get, state_set
 from .targets import TARGETS
 
-SEQUENTIAL = {"plasma colors + accent", "icons (Papirus folders)"}  # both write kdeglobals: keep ordered
+SEQUENTIAL = {"plasma colors + accent", "icons (Papirus folders)", "lxqt + labwc"}  # kdeglobals: keep ordered
 TTY = sys.stdout.isatty()
 
 
@@ -111,14 +111,14 @@ def cmd_bg(a):
     wp = pick_wallpaper(t, step)
     if not wp:
         print("theme has no backgrounds"); return 1
-    from .targets import plasma_wallpaper, login_screen, firefox
+    from .targets import plasma_wallpaper, login_screen, firefox, lxqt_wallpaper
     ctx = t.context()
-    plasma_wallpaper(t, ctx, wp)
-    for fn in (login_screen, firefox):  # firefox: pywal colors.json carries the wallpaper path
+    for fn in (plasma_wallpaper, login_screen, firefox):  # firefox: pywal colors.json carries the wallpaper path
         try:
             fn(t, ctx, wp)
         except Exception:
             log(traceback.format_exc())
+    lxqt_wallpaper(wp)
     from .picker import write_data
     write_data()
     print(wp.name)

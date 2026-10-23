@@ -3,6 +3,10 @@
 Omarchy-style, one-keystroke theme switching for KDE Plasma 6 (Wayland). One palette per theme drives the
 whole desktop: Plasma, terminals, shell, browser, editor, chat, notes and the login screen.
 
+It also themes an **LXQt + labwc** Wayland session next to Plasma, with the same keys and picker. For a
+lightweight session that feels like Plasma (shortcuts, gestures, OSD, tray popups), see
+[labwc-plasma-session](https://github.com/envy-vain/labwc-plasma-session).
+
 Themes: **Tokyo Night · Matte Black · Catppuccin Mocha · Rosé Pine · Gruvbox · Everforest · Nord · Kanagawa ·
 Cachy Night · Ethereal · Last Horizon · Vantablack**
 
@@ -80,6 +84,7 @@ Built to stay light:
 | VSCodium | `workbench.colorTheme`; themes without a published one get a theme generated from the palette |
 | Vesktop | `themes/plasma-themer.css` (hot reload) |
 | Obsidian | CSS snippet in every vault (hot reload) |
+| LXQt + labwc | panel, runner, notification and settings stylesheets, LXQt palette, labwc window borders + menus, `swaybg` wallpaper; Konsole gets an opaque profile there (labwc has no blur) |
 
 Known limit: Dolphin windows that are already open keep their old folder colors until you change folder or
 reopen them (KDE doesn't redraw them); everything else updates live.

@@ -60,7 +60,20 @@ def plasma_wallpaper(t: Theme, ctx: dict, wallpaper: Path | None):
     if not wallpaper:
         return "theme has no backgrounds"
     img = screen_wallpaper(wallpaper)  # screen-sized copy: less RAM in plasmashell, faster lock/login
-    run("plasma-apply-wallpaperimage", str(img), check=True)
+    if run("pgrep", "-u", str(os.getuid()), "-x", "plasmashell").returncode == 0:
+        run("plasma-apply-wallpaperimage", str(img), check=True)
+    else:  # another session (LXQt): edit the desktop config plasmashell reads at its next start
+        rc = XDG_CONFIG / "plasma-org.kde.plasma.desktop-appletsrc"
+        if rc.exists():
+            group, out = "", []
+            for line in rc.read_text().splitlines(keepends=True):
+                if line.startswith("["):
+                    group = line.strip()
+                elif line.startswith("Image=") and re.fullmatch(
+                        r"\[Containments\]\[\d+\]\[Wallpaper\]\[org\.kde\.image\]\[General\]", group):
+                    line = f"Image=file://{img}\n"
+                out.append(line)
+            write(rc, "".join(out))
     for k in ("Image", "PreviewImage"):
         kwrite("kscreenlockerrc", ["Greeter", "Wallpaper", "org.kde.image", "General"], k, f"file://{img}")
 
@@ -268,10 +281,18 @@ def konsole(t: Theme, ctx: dict, wallpaper: Path | None):
     cp["Terminal Features"].setdefault("BlinkingCursorEnabled", "true")
     with prof.open("w") as f:
         cp.write(f, space_around_delimiters=False)
-    (kdir / f"{_ab(sid, 'Themer')}.colorscheme").unlink(missing_ok=True)
-    kwrite("konsolerc", ["Desktop Entry"], "DefaultProfile", "Themer.profile")
+    # Opaque twin for compositors without blur (labwc/LXQt): see-through text over windows is unreadable there
+    write(kdir / f"{sid}Solid.colorscheme", render("konsole.colorscheme", {**ctx, "lite": True}))
+    cp["Appearance"]["ColorScheme"] = f"{sid}Solid"
+    cp["General"]["Name"] = "ThemerSolid"
+    with (kdir / "ThemerSolid.profile").open("w") as f:
+        cp.write(f, space_around_delimiters=False)
+    for old in (f"{_ab(sid, 'Themer')}.colorscheme", f"{_ab(sid, 'Themer')}Solid.colorscheme"):
+        (kdir / old).unlink(missing_ok=True)
+    profile = "ThemerSolid" if _in_labwc() else "Themer"
+    kwrite("konsolerc", ["Desktop Entry"], "DefaultProfile", f"{profile}.profile")
     # live: switch every open session (in-process D-Bus; one qdbus6 process per call is slow on weak CPUs)
-    n = _konsole_set_profile_all("Themer")
+    n = _konsole_set_profile_all(profile)
     return f"{n} live sessions"
 
 
@@ -287,8 +308,11 @@ def _konsole_set_profile_all(profile: str) -> int:
                 dbus_interface="org.freedesktop.DBus.Introspectable")
             for sid in re.findall(r'<node name="(\d+)"', str(xml)):  # ids have gaps after closed tabs
                 obj = bus.get_object(svc, f"/Sessions/{sid}", introspect=False)
-                obj.setProfile(profile, dbus_interface="org.kde.konsole.Session")
-                n += 1
+                try:
+                    obj.setProfile(profile, dbus_interface="org.kde.konsole.Session")
+                    n += 1
+                except dbus.DBusException:  # "Security sensitive DBus API" off: new windows still get it
+                    break
         return n
     except ImportError:
         n = 0
@@ -624,3 +648,101 @@ def login_screen(t: Theme, ctx: dict, wallpaper: Path | None):
                                           f"background={root / 'login-background.jpg'}\ncolor={ctx['c']['accent']}\n")
         os.chmod(root / "sddm-breeze.conf", 0o644)
         return "sddm"
+
+
+# ---------------------------------------------------------------- LXQt + labwc (the low-power session)
+
+LXQT = XDG_CONFIG / "lxqt"
+LABWC = XDG_CONFIG / "labwc"
+KDE_APPS = ("konsole", "dolphin", "kate", "kwrite", "okular", "gwenview", "ark", "filelight", "partitionmanager")
+UI_FONT = '"Noto Sans,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1"'  # quoted: Qt would read the commas as a list
+
+
+def _ini_set(path: Path, values: dict[str, dict[str, str]]) -> None:
+    """Merge keys into a Qt-style ini file, keeping everything else."""
+    cp = configparser.ConfigParser(interpolation=None, strict=False)
+    cp.optionxform = str
+    if path.exists():
+        cp.read(path)
+    for sec, kv in values.items():
+        if not cp.has_section(sec):
+            cp.add_section(sec)
+        for k, v in kv.items():
+            cp[sec][k] = v
+    buf = __import__("io").StringIO()
+    cp.write(buf, space_around_delimiters=False)
+    write(path, buf.getvalue())
+
+
+def _in_labwc() -> bool:
+    return bool(os.environ.get("LABWC_PID")) or run("pgrep", "-u", str(os.getuid()), "-x", "labwc").returncode == 0
+
+
+def lxqt_wallpaper(wallpaper: Path) -> None:
+    """swaybg reads the `current/wallpaper` link at login; restart it live when labwc is running."""
+    link = CURRENT / "wallpaper"
+    tmp = link.with_name("wallpaper.tmp")
+    tmp.unlink(missing_ok=True)
+    tmp.symlink_to(screen_wallpaper(wallpaper))
+    tmp.replace(link)
+    if not (_in_labwc() and have("swaybg")):
+        return
+    old = run("pgrep", "-u", str(os.getuid()), "-x", "swaybg").stdout.split()
+    subprocess.Popen(["swaybg", "-m", "fill", "-i", str(link)], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL, start_new_session=True)
+    if old:  # the new one draws first, then the old one goes: no flash of bare background
+        import time
+        time.sleep(0.4)
+        run("kill", *old)
+
+
+@target("lxqt + labwc")
+def lxqt(t: Theme, ctx: dict, wallpaper: Path | None):
+    if not have("lxqt-panel"):
+        return "skipped: LXQt not installed"
+    c = ctx["c"]
+    cp = configparser.ConfigParser(interpolation=None, strict=False)
+    cp.optionxform = str
+    cp.read(LXQT / "lxqt.conf")
+    # Alternate the theme name: LXQt only reloads its stylesheets when the theme name changes.
+    sid = _ab(cp.get("General", "theme", fallback=""), "Themer")
+    tdir = XDG_DATA / "lxqt/themes"
+    icons = kread("kdeglobals", ["Icons"], "Theme") or "breeze-dark"  # the icons target ran just before us
+    badge = next((XDG_DATA / "icons" / icons).glob("scalable/apps/themer-start-*.svg"), None)
+    for name in ("lxqt-panel.qss", "lxqt-runner.qss", "lxqt-notificationd.qss", "lxqt-config.qss"):
+        write(tdir / sid / name, render(f"lxqt/{name}", ctx))
+    # panel.conf's fancymenu icon points at this link (the panel picks up a new badge at its next start)
+    link = CURRENT / "menu-icon.svg"
+    tmp = link.with_name("menu-icon.tmp")
+    tmp.unlink(missing_ok=True)
+    tmp.symlink_to(badge or Path("/usr/share/icons/hicolor/scalable/apps/lxqt.svg"))  # ships with lxqt-panel
+    tmp.replace(link)
+    shutil.rmtree(tdir / _ab(sid, "Themer"), ignore_errors=True)
+
+    # KDE apps outside Plasma fall back to light Breeze unless the scheme is set per app
+    scheme = kread("kdeglobals", ["General"], "ColorScheme")
+    if scheme.startswith("Themer"):
+        for app in KDE_APPS:
+            kwrite(f"{app}rc", ["UiSettings"], "ColorScheme", scheme)
+    _ini_set(LXQT / "lxqt.conf", {
+        "General": {"theme": sid, "icon_theme": icons, "icon_follow_color_scheme": "true"},
+        "Qt": {"style": "Breeze", "font": UI_FONT},
+        "Palette": {
+            "window_color": c["background"], "window_text_color": c["foreground"],
+            "highlight_color": c["accent"], "highlighted_text_color": c["accent_foreground"],
+            "link_color": c["blue"], "link_visited_color": c["magenta"],
+            "tooltip_base_color": c["surface"], "tooltip_text_color": c["foreground"],
+        },
+    })
+    cursor_theme = t.meta.get("cursor", "breeze_cursors")
+    if not _icon_theme_exists(cursor_theme):
+        cursor_theme = "breeze_cursors"
+    _ini_set(LXQT / "session.conf", {"Mouse": {"cursor_theme": cursor_theme, "cursor_size": "24"}})
+
+    write(LABWC / "themerc-override", render("lxqt/labwc-themerc", ctx))
+    if wallpaper:
+        lxqt_wallpaper(wallpaper)
+    if _in_labwc():
+        run("labwc", "--reconfigure")
+        return "live"
+    return "files written (applies at next LXQt login)"
