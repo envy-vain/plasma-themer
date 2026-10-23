@@ -106,3 +106,6 @@ optional `vscode.json` and `backgrounds/`. Personal themes can live in `~/.confi
 ## About
 
 I wrote the base of this project (the code that does the theming); the front end (the picker UI) was designed by Claude.
+
+**LLM disclaimer:** an LLM (Claude, by Anthropic) helped build this project: it designed the picker UI and helped
+with parts of the code. Everything is tested on my own machine and I use it daily.
